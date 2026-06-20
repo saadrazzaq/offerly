@@ -1,0 +1,13 @@
+# Personal data — raw model responses include resume/contact details
+offerly.log
+*.log
+
+# Node
+node_modules/
+
+# OS / editor / tooling
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/

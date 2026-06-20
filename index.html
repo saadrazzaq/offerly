@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Offerly — Engineered to get you offers</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236d8bff'/><stop offset='1' stop-color='%238b5cf6'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><circle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2.6'/><path d='M16 20.5 V12 M12.5 15.5 L16 12 L19.5 15.5' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17; --bg2:#111827; --card:#151c2c; --card2:#1b2436;
+    --line:#243049; --text:#e7ecf5; --mut:#93a0bd; --mut2:#6b7892;
+    --acc:#6d8bff; --acc2:#8b5cf6; --grad:linear-gradient(135deg,#6d8bff,#8b5cf6);
+    --green:#34d399; --amber:#fbbf24; --red:#fb7185; --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;background:
+    radial-gradient(1200px 600px at 80% -10%,rgba(139,92,246,.14),transparent),
+    radial-gradient(1000px 500px at -10% 10%,rgba(109,139,255,.12),transparent),var(--bg);
+    color:var(--text);min-height:100vh;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+    background:rgba(11,15,23,.78);border-bottom:1px solid var(--line)}
+  .hbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:1180px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:18px;letter-spacing:-.3px}
+  .logo{width:36px;height:36px;border-radius:10px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 18px rgba(109,139,255,.4)}
+  .wordmark{display:flex;flex-direction:column;line-height:1}
+  .wordmark small{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut2);margin-top:3px}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s}
+  .ghost:hover{border-color:var(--acc);color:var(--text)}
+
+  .hero{text-align:center;padding:46px 0 26px}
+  .hero h1{font-size:40px;font-weight:800;letter-spacing:-1px;background:linear-gradient(180deg,#fff,#aeb9d6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--mut);margin-top:12px;font-size:16px;max-width:680px;margin-left:auto;margin-right:auto}
+  .tagchips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+  .tag{font-size:12px;color:var(--mut);background:var(--card);border:1px solid var(--line);padding:6px 12px;border-radius:20px}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow)}
+  .grid-setup{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-top:8px}
+  @media(max-width:820px){.grid-setup{grid-template-columns:1fr}}
+
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:30px;text-align:center;cursor:pointer;transition:.18s;background:var(--card2)}
+  .drop:hover,.drop.over{border-color:var(--acc);background:#1d2740}
+  .drop .ic{font-size:34px}
+  .drop b{display:block;margin-top:8px;font-size:15px}
+  .drop span{color:var(--mut);font-size:13px}
+  .filemeta{display:none;align-items:center;gap:12px;margin-top:14px;background:var(--card2);border:1px solid var(--line);padding:12px 14px;border-radius:11px}
+  .filemeta .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
+  .filemeta small{color:var(--mut)}
+
+  label.lab{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut2);margin:0 0 7px;font-weight:700}
+  select,input[type=text],input[type=password]{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:12px 13px;border-radius:11px;font-size:14px;outline:none;transition:.15s}
+  select:focus,input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(109,139,255,.15)}
+  .field{margin-bottom:16px}
+
+  .cta{width:100%;background:var(--grad);border:none;color:#fff;font-weight:800;font-size:16px;padding:15px;border-radius:13px;cursor:pointer;margin-top:6px;box-shadow:0 10px 28px rgba(109,139,255,.35);transition:.15s;letter-spacing:.2px}
+  .cta:hover{transform:translateY(-1px);box-shadow:0 14px 34px rgba(109,139,255,.5)}
+  .cta:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+  /* settings drawer */
+  .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+  .modal.show{display:flex}
+  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:520px;width:100%;padding:26px;box-shadow:var(--shadow)}
+  .mbox h3{font-size:20px;margin-bottom:6px}
+  .mbox p.sub{color:var(--mut);font-size:13px;margin-bottom:18px}
+  .keyrow{display:flex;gap:8px}
+  .note{font-size:12px;color:var(--mut2);margin-top:8px;line-height:1.5}
+  .note a{color:var(--acc)}
+
+  /* loading */
+  #loading{display:none;text-align:center;padding:60px 0}
+  .spinner{width:46px;height:46px;border:4px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 18px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loadingTxt{color:var(--mut);font-size:14px}
+
+  /* results */
+  #results{display:none;margin-top:30px}
+  .secttitle{display:flex;align-items:center;gap:10px;margin:30px 0 14px;font-size:22px;font-weight:800;letter-spacing:-.3px}
+  .secttitle .pill{font-size:12px;font-weight:700;padding:4px 11px;border-radius:20px;border:1px solid var(--line);color:var(--mut)}
+
+  .analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.analysis-grid{grid-template-columns:1fr}}
+  .mini{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .mini h4{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut2);margin-bottom:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{background:var(--card2);border:1px solid var(--line);padding:6px 11px;border-radius:8px;font-size:13px}
+  .chip.good{border-color:rgba(52,211,153,.4);color:#7ff0c8}
+  .chip.gap{border-color:rgba(251,113,133,.4);color:#ffb3bf}
+  .summary{color:var(--mut);font-size:14px}
+  .statrow{display:flex;gap:22px;margin-top:6px;flex-wrap:wrap}
+  .stat b{font-size:22px;display:block;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat span{font-size:12px;color:var(--mut2)}
+
+  /* ATS panel */
+  .ats-panel{display:flex;flex-direction:column;gap:20px}
+  .ats-head{display:flex;align-items:center;gap:20px}
+  .ats-ring{flex:none;width:96px;height:96px;border-radius:50%;display:grid;place-items:center}
+  .ats-inner{width:78px;height:78px;border-radius:50%;background:var(--card);display:grid;place-items:center;line-height:1}
+  .ats-inner span{font-size:30px;font-weight:800}
+  .ats-inner small{font-size:11px;color:var(--mut2);margin-top:2px}
+  .ats-verdict h4{font-size:18px;margin-bottom:4px}
+  .ats-verdict p{color:var(--mut);font-size:14px}
+  .ats-bars{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.ats-bars{grid-template-columns:1fr}.ats-head{flex-direction:column;text-align:center}}
+  .ats-bar-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:6px}
+  .ats-track{height:7px;background:var(--card2);border-radius:6px;overflow:hidden}
+  .ats-fill{height:100%;border-radius:6px;transition:width .8s ease}
+  .ats-bar small{display:block;color:var(--mut2);font-size:12px;margin-top:6px}
+  .ats-fixes{border-top:1px solid var(--line);padding-top:16px}
+  .ats-fixes h4{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut2);margin-bottom:10px}
+  .ats-fixes ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .ats-fixes li{font-size:14px;color:var(--mut);padding-left:22px;position:relative}
+  .ats-fixes li:before{content:'⚡';position:absolute;left:0}
+
+  .imp{display:flex;gap:13px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:10px}
+  .imp .prio{flex:none;font-size:11px;font-weight:800;text-transform:uppercase;padding:4px 9px;border-radius:7px;height:fit-content}
+  .prio.high{background:rgba(251,113,133,.15);color:#ffb3bf}
+  .prio.med{background:rgba(251,191,36,.15);color:#ffe08a}
+  .prio.low{background:rgba(109,139,255,.15);color:#b9c6ff}
+  .imp .body b{display:block;margin-bottom:3px;font-size:14px}
+  .imp .body p{color:var(--mut);font-size:13px}
+
+  /* filters */
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0 18px}
+  .filters select,.filters input{width:auto;padding:9px 12px;font-size:13px}
+  .filters .grow{flex:1;min-width:180px}
+
+  /* job cards */
+  .jobs{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.jobs{grid-template-columns:1fr}}
+  .job{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;transition:.15s;position:relative;overflow:hidden}
+  .job:hover{border-color:var(--acc);transform:translateY(-2px)}
+  .job .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .job h3{font-size:16px;line-height:1.3}
+  .job .co{color:var(--mut);font-size:13px;margin-top:3px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .type{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--card2);border:1px solid var(--line);color:var(--mut)}
+  .ring{flex:none;width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:17px;position:relative}
+  .ring small{position:absolute;bottom:6px;font-size:8px;font-weight:600;color:var(--mut2)}
+  .reasons{font-size:13px;color:var(--mut);display:flex;flex-direction:column;gap:5px}
+  .reasons div{display:flex;gap:7px}
+  .reasons .tick{color:var(--green);flex:none}
+  .miss{font-size:12px;color:var(--mut2)}
+  .actions{display:flex;gap:9px;margin-top:auto;padding-top:6px}
+  .btn{flex:1;text-align:center;padding:11px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--line);text-decoration:none;transition:.15s;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn.apply{background:var(--grad);color:#fff;border:none}
+  .btn.apply:hover{filter:brightness(1.08)}
+  .btn.mail{background:var(--card2);color:var(--text)}
+  .btn.mail:hover{border-color:var(--acc);color:#fff}
+  .btn.mail.loading{opacity:.6;pointer-events:none}
+  .sublinks{display:flex;gap:6px;flex-wrap:wrap}
+  .sublinks a{font-size:11px;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:7px;text-decoration:none}
+  .sublinks a:hover{border-color:var(--acc);color:var(--text)}
+
+  .err{display:none;background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.4);color:#ffb3bf;padding:14px 16px;border-radius:12px;margin-top:16px;font-size:14px}
+  footer{text-align:center;color:var(--mut2);font-size:12px;padding:40px 0 30px;line-height:1.7}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg2);border:1px solid var(--acc);color:var(--text);padding:12px 20px;border-radius:11px;font-size:14px;box-shadow:var(--shadow);z-index:200;transition:.3s}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <div class="brand">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="9" stroke="#fff" stroke-width="2.6"/>
+          <path d="M16 20.5 V12 M12.5 15.5 L16 12 L19.5 15.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="wordmark">Offerly<small>get the offer</small></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="tag" id="bridgeStatus" style="display:none">●</span>
+      <button class="ghost" onclick="openSettings()">⚙ Model</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Engineered to get you offers</h1>
+    <p>Offerly reads your resume like a top 1% tech recruiter — then hands you an ATS score, best-fit roles, 20+ real-company opportunities scored against your profile, one-click apply, and the exact fixes to land more interviews.</p>
+    <div class="tagchips">
+      <span class="tag">🎯 Fit scores /100</span>
+      <span class="tag">🏢 Startups · Scale-ups · MNCs · Consulting</span>
+      <span class="tag">✉️ 1-click Gmail apply</span>
+      <span class="tag">🔗 Live job-board links</span>
+      <span class="tag">📈 Resume improvements</span>
+    </div>
+  </div>
+
+  <div class="grid-setup">
+    <div class="panel">
+      <label class="lab">1 · Upload your resume</label>
+      <div class="drop" id="drop">
+        <div class="ic">📄</div>
+        <b>Drop your resume here or click to browse</b>
+        <span>PDF, DOCX or TXT — parsed privately in your browser</span>
+      </div>
+      <input type="file" id="file" accept=".pdf,.docx,.txt" hidden />
+      <div class="filemeta" id="filemeta">
+        <div class="dot"></div>
+        <div><b id="fname"></b><br><small id="fchars"></small></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="field">
+        <label class="lab">2 · Target country</label>
+        <select id="country"></select>
+      </div>
+      <div class="field">
+        <label class="lab">3 · Target career stage</label>
+        <select id="seniority">
+          <option value="auto">Auto-detect from resume</option>
+          <option>Fresh / Entry-level</option>
+          <option>Fresh → Senior</option>
+          <option>Senior → Lead</option>
+          <option>Lead → Architect</option>
+          <option>Architect → Manager</option>
+          <option>Manager → Director / Head</option>
+        </select>
+      </div>
+      <button class="cta" id="analyze" onclick="analyze()" disabled>Analyze &amp; Find My Jobs →</button>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loadingTxt">Reading your resume like a recruiter…</div>
+  </div>
+
+  <div id="results"></div>
+
+  <footer>
+    Powered locally by your Claude Code subscription — no API key, no extra credits, resume stays on your machine.<br/>
+    Job links open real, live searches on LinkedIn / Indeed / Glassdoor / company career pages — nothing is fabricated.<br/>
+    Gmail can't auto-attach files: the compose window opens pre-filled, just drag your resume in &amp; send.
+  </footer>
+</div>
+
+<!-- Settings modal -->
+<div class="modal" id="settings">
+  <div class="mbox">
+    <h3>Model</h3>
+    <p class="sub">Runs through your local bridge → your Claude Code subscription. No API key, no credits.</p>
+    <div class="field">
+      <label class="lab">Model</label>
+      <select id="model">
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced (recommended)</option>
+        <option value="claude-opus-4-8">Claude Opus 4.8 — deepest analysis</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>
+      </select>
+    </div>
+    <p class="note" id="bridgeNote">Checking bridge connection…</p>
+    <button class="cta" onclick="saveSettings()">Save</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787');
+const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
+const state={resumeText:"",fileName:"",letterCache:{},jobs:[],candidateName:""};
+
+/* ---------- init ---------- */
+const csel=document.getElementById('country');
+COUNTRIES.forEach(c=>{const o=document.createElement('option');o.textContent=c;csel.appendChild(o);});
+csel.value=localStorage.getItem('country')||"United States";
+csel.onchange=()=>localStorage.setItem('country',csel.value);
+document.getElementById('model').value=localStorage.getItem('model')||"claude-sonnet-4-6";
+
+/* ---------- bridge health ---------- */
+async function checkBridge(){
+  const dot=document.getElementById('bridgeStatus'), note=document.getElementById('bridgeNote');
+  try{
+    const r=await fetch(BRIDGE+'/health');const j=await r.json();
+    if(j.ok){dot.style.display='inline-block';dot.style.color='var(--green)';dot.title='Bridge connected';if(note)note.innerHTML='🟢 Bridge connected — using your Claude Code subscription.';}
+    else{dot.style.display='inline-block';dot.style.color='var(--amber)';if(note)note.innerHTML='🟡 Bridge running but Claude binary not found.';}
+  }catch(e){
+    dot.style.display='inline-block';dot.style.color='var(--red)';dot.title='Bridge offline';
+    if(note)note.innerHTML='🔴 Bridge offline. Run <b>start.cmd</b> in the project folder, then open <a href="'+BRIDGE+'/">'+BRIDGE+'/</a>';
+  }
+}
+checkBridge();
+
+/* ---------- settings ---------- */
+function openSettings(){document.getElementById('settings').classList.add('show');}
+function saveSettings(){
+  localStorage.setItem('model',document.getElementById('model').value);
+  document.getElementById('settings').classList.remove('show');
+  toast('Saved ✓');
+}
+document.getElementById('settings').addEventListener('click',e=>{if(e.target.id==='settings')e.target.classList.remove('show');});
+
+/* ---------- file upload ---------- */
+const drop=document.getElementById('drop'),fileInput=document.getElementById('file');
+drop.onclick=()=>fileInput.click();
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+fileInput.onchange=()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);};
+
+async function handleFile(f){
+  showErr('');
+  state.fileName=f.name;
+  try{
+    let txt="";
+    if(f.name.toLowerCase().endsWith('.pdf')){
+      const buf=await f.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const c=await page.getTextContent();
+        txt+=c.items.map(it=>it.str).join(' ')+'\n';
+      }
+    }else if(f.name.toLowerCase().endsWith('.docx')){
+      const buf=await f.arrayBuffer();
+      const res=await mammoth.extractRawText({arrayBuffer:buf});
+      txt=res.value;
+    }else{
+      txt=await f.text();
+    }
+    txt=txt.replace(/\s+\n/g,'\n').trim();
+    if(txt.length<80){showErr('Could not read enough text from this file. If it is a scanned/image PDF, please upload a text-based PDF or DOCX.');return;}
+    state.resumeText=txt;
+    document.getElementById('fname').textContent=f.name;
+    document.getElementById('fchars').textContent=txt.length.toLocaleString()+' characters parsed';
+    document.getElementById('filemeta').style.display='flex';
+    document.getElementById('analyze').disabled=false;
+  }catch(err){showErr('Failed to parse file: '+err.message);}
+}
+
+/* ---------- analyze ---------- */
+async function analyze(){
+  if(!state.resumeText){toast('Upload a resume first');return;}
+  showErr('');
+  document.getElementById('results').style.display='none';
+  document.getElementById('loading').style.display='block';
+  document.getElementById('analyze').disabled=true;
+  cycleLoading();
+
+  const country=csel.value;
+  const sen=document.getElementById('seniority').value;
+  const R=state.resumeText;
+
+  // Split into 3 parallel calls — the headless CLI is slow, so one giant call times out.
+  const tasks=[
+    callJSON(buildAnalysisPrompt(R,country,sen)),
+    callJSON(buildJobsPrompt(R,country,sen,'early-stage startups and fast-growing scale-ups',10)),
+    callJSON(buildJobsPrompt(R,country,sen,'large multinational enterprises (MNCs), top global consulting firms, and specialist tech agencies',12))
+  ];
+
+  try{
+    const [aRes,bRes,cRes]=await Promise.allSettled(tasks);
+    if(aRes.status!=='fulfilled') throw new Error((aRes.reason&&aRes.reason.message)||'Analysis failed');
+    const aData=aRes.value;
+
+    let jobs=[];
+    [bRes,cRes].forEach(r=>{ if(r.status==='fulfilled'&&r.value){ jobs=jobs.concat(r.value.opportunities||[]); } });
+    jobs=dedupeJobs(jobs);
+    if(!jobs.length) throw new Error('No opportunities came back. Please click Analyze again.');
+
+    const analysis=aData.analysis||aData;
+    const improvements=aData.resumeImprovements||(analysis&&analysis.resumeImprovements)||[];
+    const parsed={analysis, resumeImprovements:improvements, opportunities:jobs};
+    state.jobs=jobs;
+    state.candidateName=(analysis&&analysis.candidateName)||"";
+    state.contact={name:state.candidateName,email:analysis.candidateEmail||"",phone:analysis.candidatePhone||"",linkedin:analysis.candidateLinkedIn||""};
+    state.country=country;
+    state.seniority=sen;
+    state.letterCache={};
+    renderResults(parsed);
+  }catch(err){
+    showErr(err.message||String(err));
+  }finally{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('analyze').disabled=false;
+    clearInterval(window._lc);
+  }
+}
+function dedupeJobs(arr){
+  const seen=new Set(),out=[];
+  for(const j of arr){const k=((j.company||'')+'|'+(j.role||'')).toLowerCase().trim();if(k==='|'||seen.has(k))continue;seen.add(k);out.push(j);}
+  return out;
+}
+
+const LOAD_MSGS=["Reading your resume like a recruiter…","Mapping your skills to market demand…","Scanning startups, scale-ups, MNCs & consulting firms…","Scoring each role against your profile…","Drafting your application strategy…"];
+function cycleLoading(){let i=0;clearInterval(window._lc);window._lc=setInterval(()=>{i=(i+1)%LOAD_MSGS.length;document.getElementById('loadingTxt').textContent=LOAD_MSGS[i];},2200);}
+
+function buildAnalysisPrompt(resume,country,sen){
+  return `You are a top 1% tech recruiter for the ${country} hiring market. Analyze the candidate's resume below.
+${sen!=='auto'?`The candidate is targeting roles at this level: ${sen}.`:''}
+Also audit the resume against modern ATS (Workday, Greenhouse, Lever, Taleo): an overall score 0-100, plus six areas each scored 0-100 with a one-line note — "Keyword & role alignment", "Formatting & parseability", "Section structure", "Quantified impact", "Contact & links", "Skills coverage". Be a strict but fair ATS auditor.
+
+Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
+{"analysis":{"candidateName":"string or empty","candidateEmail":"from resume or empty","candidatePhone":"from resume or empty","candidateLinkedIn":"full LinkedIn URL from resume or empty","seniority":"string","yearsExperience":"e.g. '4 yrs'","summary":"2-3 sentence recruiter view","topSkills":["..."],"strengths":["3-5"],"gaps":["2-4 gaps for ${country}"],"targetRoles":["4-7 best-fit job titles"],"ats":{"score":0,"verdict":"one short line","breakdown":[{"area":"Keyword & role alignment","score":0,"note":"..."},{"area":"Formatting & parseability","score":0,"note":"..."},{"area":"Section structure","score":0,"note":"..."},{"area":"Quantified impact","score":0,"note":"..."},{"area":"Contact & links","score":0,"note":"..."},{"area":"Skills coverage","score":0,"note":"..."}],"quickFixes":["3-5 specific ATS fixes"]}},"resumeImprovements":[{"priority":"high|medium|low","title":"short","detail":"specific, actionable"}]}
+
+Resume:
+"""${resume.slice(0,12000)}"""`;
+}
+
+function buildJobsPrompt(resume,country,sen,segment,count){
+  return `You are a top 1% tech recruiter for the ${country} hiring market. Based on the candidate's resume below, list EXACTLY ${count} concrete, realistic job opportunities at REAL, well-known ${segment} that genuinely hire for this candidate's profile in ${country}.
+${sen!=='auto'?`Target this level: ${sen}.`:''}
+Do NOT invent application URLs or recruiter emails — the app builds verified search links itself. Provide a careerDomain only when you are confident of the company's primary website domain.
+Mix categories honestly vs the resume: "high" (strong match, fit 78-97), "medium" (good with minor gaps, fit 60-79), "stretch" (aspirational, fit 40-62).
+
+Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
+{"opportunities":[{"company":"Real company","companyType":"Startup|Scale-up|MNC|Consulting|Agency","role":"specific title","location":"city, ${country} or Remote","category":"high|medium|stretch","fitScore":0,"careerDomain":"company.com or empty","matchReasons":["2-3"],"missingForRole":["0-2"],"pitch":"one punchy sentence"}]}
+
+Resume:
+"""${resume.slice(0,12000)}"""`;
+}
+
+/* ---------- Claude (via local bridge → your Claude Code subscription) ---------- */
+async function callClaude(messages,maxTokens){
+  const model=localStorage.getItem('model')||'claude-sonnet-4-6';
+  const prompt=messages.map(m=>m.content).join('\n\n');
+  let res;
+  try{
+    res=await fetch(BRIDGE+'/api',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({prompt,model})
+    });
+  }catch(e){
+    throw new Error('Cannot reach the local bridge at '+BRIDGE+'. Start it first: run start.cmd (or `node bridge.js`) in the project folder, then open '+BRIDGE+'/');
+  }
+  if(!res.ok){
+    let msg='Bridge error '+res.status;
+    try{const e=await res.json();msg=e.error||msg;}catch{}
+    throw new Error(msg);
+  }
+  const j=await res.json();
+  return j.text||'';
+}
+
+// Call + parse with one self-healing retry if the model doesn't return clean JSON.
+async function callJSON(prompt){
+  let last='';
+  for(let attempt=0;attempt<2;attempt++){
+    const p=attempt===0?prompt:prompt+'\n\nIMPORTANT: your previous reply was NOT valid JSON. Reply with ONLY the raw minified JSON object — start with { and end with } — no code fences, no commentary, no trailing text.';
+    last=await callClaude([{role:'user',content:p}]);
+    try{return extractJSON(last);}catch(_){}
+  }
+  throw new Error('Could not parse a valid response. It starts with: "'+(last||'').slice(0,90).replace(/\n/g,' ')+'"');
+}
+// Close any unbalanced braces/brackets/strings at EOF (handles the model dropping a trailing brace).
+function repairJSON(t){
+  let inStr=false,esc=false;const stack=[];
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(inStr){ if(esc)esc=false; else if(ch==='\\')esc=true; else if(ch==='"')inStr=false; continue; }
+    if(ch==='"')inStr=true;
+    else if(ch==='{'||ch==='[')stack.push(ch);
+    else if(ch==='}'||ch===']')stack.pop();
+  }
+  let f=t; if(inStr)f+='"'; f=f.replace(/,\s*$/,'');
+  while(stack.length){const o=stack.pop();f+=(o==='{'?'}':']');}
+  return f;
+}
+function extractJSON(s){
+  let t=(s||'').trim().replace(/^```(json)?\s*/i,'');
+  const start=t.indexOf('{');
+  if(start<0)throw new Error('No data returned. Please click Analyze again.');
+  t=t.slice(start);
+  // walk to the matching close brace of the FIRST object (ignores any trailing fence/notes)
+  let depth=0,inStr=false,esc=false,end=-1;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(inStr){ if(esc)esc=false; else if(ch==='\\')esc=true; else if(ch==='"')inStr=false; }
+    else if(ch==='"')inStr=true;
+    else if(ch==='{')depth++;
+    else if(ch==='}'){ if(--depth===0){end=i;break;} }
+  }
+  const cands=[];
+  if(end>=0)cands.push(t.slice(0,end+1)); // clean: balanced first object
+  cands.push(repairJSON(t));              // repaired: auto-close any missing braces
+  for(const c of cands){ try{ return JSON.parse(c.replace(/,\s*([}\]])/g,'$1')); }catch(_){} }
+  throw new Error('The model returned malformed data. Please click Analyze again.');
+}
+
+/* ---------- render ---------- */
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function scoreColor(s){return s>=78?'var(--green)':s>=60?'var(--amber)':'var(--red)';}
+
+function renderResults(d){
+  const a=d.analysis||{};
+  const r=document.getElementById('results');
+  const counts={high:0,medium:0,stretch:0};
+  (d.opportunities||[]).forEach(o=>counts[o.category]=(counts[o.category]||0)+1);
+
+  let html=`
+  <div class="secttitle">📊 Your Recruiter Profile</div>
+  <div class="panel" style="margin-bottom:16px">
+    <div class="statrow" style="margin-bottom:14px">
+      <div class="stat"><b>${esc(a.seniority||'—')}</b><span>Level</span></div>
+      <div class="stat"><b>${esc(a.yearsExperience||'—')}</b><span>Experience</span></div>
+      <div class="stat"><b>${a.ats?Math.round(a.ats.score)+'/100':'—'}</b><span>ATS score</span></div>
+      <div class="stat"><b>${(d.opportunities||[]).length}</b><span>Opportunities</span></div>
+      <div class="stat"><b>${counts.high||0}</b><span>High-probability</span></div>
+    </div>
+    <p class="summary">${esc(a.summary||'')}</p>
+  </div>
+  <div class="analysis-grid">
+    <div class="mini"><h4>🎯 Roles to target</h4><div class="chips">${(a.targetRoles||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div></div>
+    <div class="mini"><h4>🛠 Top skills</h4><div class="chips">${(a.topSkills||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div></div>
+    <div class="mini"><h4>✅ Strengths</h4><div class="chips">${(a.strengths||[]).map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div></div>
+    <div class="mini"><h4>⚠️ Gaps for ${esc(state.country)}</h4><div class="chips">${(a.gaps||[]).map(x=>`<span class="chip gap">${esc(x)}</span>`).join('')}</div></div>
+  </div>`;
+
+  const ats=a.ats;
+  if(ats){
+    const sc=Math.round(ats.score||0), col=scoreColor(sc);
+    html+=`<div class="secttitle">🤖 ATS Compatibility Score</div>
+    <div class="panel ats-panel">
+      <div class="ats-head">
+        <div class="ats-ring" style="background:conic-gradient(${col} ${sc*3.6}deg, var(--card2) 0)">
+          <div class="ats-inner"><span style="color:${col}">${sc}</span><small>/100</small></div>
+        </div>
+        <div class="ats-verdict">
+          <h4>${sc>=80?'Strong ATS resume':sc>=60?'Decent — needs tuning':'At risk of being filtered'}</h4>
+          <p>${esc(ats.verdict||'')}</p>
+        </div>
+      </div>
+      <div class="ats-bars">
+        ${(ats.breakdown||[]).map(b=>{const s=Math.round(b.score||0),c=scoreColor(s);return `
+          <div class="ats-bar">
+            <div class="ats-bar-top"><span>${esc(b.area)}</span><b style="color:${c}">${s}</b></div>
+            <div class="ats-track"><div class="ats-fill" style="width:${s}%;background:${c}"></div></div>
+            <small>${esc(b.note||'')}</small>
+          </div>`;}).join('')}
+      </div>
+      ${(ats.quickFixes||[]).length?`<div class="ats-fixes"><h4>⚡ Quick ATS fixes</h4><ul>${ats.quickFixes.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></div>`:''}
+    </div>`;
+  }
+
+  if((d.resumeImprovements||[]).length){
+    html+=`<div class="secttitle">📈 Resume Improvements</div><div class="panel">`;
+    d.resumeImprovements.forEach(it=>{
+      const p=(it.priority||'low').toLowerCase();
+      html+=`<div class="imp"><div class="prio ${p}">${esc(p)}</div><div class="body"><b>${esc(it.title)}</b><p>${esc(it.detail)}</p></div></div>`;
+    });
+    html+=`</div>`;
+  }
+
+  // filters
+  html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill">${(d.opportunities||[]).length} roles</span></div>
+  <div class="filters">
+    <input class="grow" type="text" id="search" placeholder="🔍 Filter by company or role…" oninput="renderJobs()" />
+    <select id="fcat" onchange="renderJobs()">
+      <option value="">All probabilities</option>
+      <option value="high">High-probability</option>
+      <option value="medium">Medium-probability</option>
+      <option value="stretch">Stretch</option>
+    </select>
+    <select id="ftype" onchange="renderJobs()">
+      <option value="">All company types</option>
+      <option>Startup</option><option>Scale-up</option><option>MNC</option><option>Consulting</option><option>Agency</option>
+    </select>
+    <select id="fsort" onchange="renderJobs()">
+      <option value="fit">Sort: Fit score</option>
+      <option value="company">Sort: Company A–Z</option>
+    </select>
+  </div>
+  <div id="jobsWrap"></div>`;
+
+  r.innerHTML=html;
+  r.style.display='block';
+  renderJobs();
+  r.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+const CATLABEL={high:'🟢 High-probability',medium:'🟡 Medium-probability',stretch:'🔵 Stretch'};
+function renderJobs(){
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const fc=document.getElementById('fcat').value, ft=document.getElementById('ftype').value, fs=document.getElementById('fsort').value;
+  let list=state.jobs.map((j,i)=>({...j,_i:i})).filter(j=>{
+    if(fc&&j.category!==fc)return false;
+    if(ft&&(j.companyType||'')!==ft)return false;
+    if(q&&!(`${j.company} ${j.role}`.toLowerCase().includes(q)))return false;
+    return true;
+  });
+  if(fs==='company')list.sort((a,b)=>(a.company||'').localeCompare(b.company||''));
+  else list.sort((a,b)=>(b.fitScore||0)-(a.fitScore||0));
+
+  const wrap=document.getElementById('jobsWrap');
+  if(!list.length){wrap.innerHTML='<p style="color:var(--mut);padding:20px 0">No matches for these filters.</p>';return;}
+
+  if(fc||ft||q){ // flat grid when filtering
+    wrap.innerHTML=`<div class="jobs">${list.map(cardHTML).join('')}</div>`;
+  }else{ // grouped by category
+    let h='';
+    ['high','medium','stretch'].forEach(cat=>{
+      const g=list.filter(j=>j.category===cat);
+      if(!g.length)return;
+      h+=`<div style="margin:6px 0 12px;font-weight:700;color:var(--mut);font-size:14px">${CATLABEL[cat]} · ${g.length}</div><div class="jobs" style="margin-bottom:22px">${g.map(cardHTML).join('')}</div>`;
+    });
+    wrap.innerHTML=h;
+  }
+}
+
+function cardHTML(j){
+  const sc=j.fitScore||0, col=scoreColor(sc);
+  const reasons=(j.matchReasons||[]).map(r=>`<div><span class="tick">✓</span><span>${esc(r)}</span></div>`).join('');
+  const miss=(j.missingForRole||[]).length?`<div class="miss">📌 To strengthen: ${(j.missingForRole||[]).map(esc).join(', ')}</div>`:'';
+  return `<div class="job">
+    <div class="top">
+      <div>
+        <h3>${esc(j.role)}</h3>
+        <div class="co">${esc(j.company)} <span class="type">${esc(j.companyType||'')}</span> · ${esc(j.location||'')}</div>
+      </div>
+      <div class="ring" style="background:conic-gradient(${col} ${sc*3.6}deg, var(--card2) 0)">
+        <div style="position:absolute;inset:5px;border-radius:50%;background:var(--card);display:grid;place-items:center">
+          <span style="color:${col}">${sc}</span><small>FIT</small>
+        </div>
+      </div>
+    </div>
+    <div class="reasons">${reasons}</div>
+    ${miss}
+    <div class="sublinks">
+      <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
+      <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
+      <a href="${glassdoorURL(j)}" target="_blank" rel="noopener">Glassdoor</a>
+      ${j.careerDomain?`<a href="https://${esc(j.careerDomain)}/careers" target="_blank" rel="noopener">Careers ↗</a>`:''}
+    </div>
+    <div class="actions">
+      <a class="btn apply" href="${applyURL(j)}" target="_blank" rel="noopener">🔗 Apply / View role</a>
+      <button class="btn mail" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ Apply by Email</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- link builders (real, live searches) ---------- */
+function enc(s){return encodeURIComponent(s||'');}
+function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+state.country+' careers apply job')}`;}
+function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}`;}
+function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||''))}&l=${enc(state.country)}`;}
+function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||''))}`;}
+
+/* ---------- email apply ---------- */
+async function emailApply(i){
+  const j=state.jobs[i];
+  const btn=document.getElementById('mail-'+i);
+  let letter=state.letterCache[i];
+  if(!letter){
+    btn.classList.add('loading');btn.textContent='✍️ Writing letter…';
+    try{
+      letter=await genCoverLetter(j);
+      state.letterCache[i]=letter;
+    }catch(err){
+      btn.classList.remove('loading');btn.textContent='✉️ Apply by Email';
+      toast('Cover letter failed: '+(err.message||err));return;
+    }
+    btn.classList.remove('loading');btn.textContent='✉️ Apply by Email';
+  }
+  const to=j.careerDomain?`careers@${j.careerDomain}`:'';
+  const subj=`Application — ${j.role} at ${j.company}${state.candidateName?(' — '+state.candidateName):''}`;
+  const gmail=`https://mail.google.com/mail/?view=cm&fs=1&to=${enc(to)}&su=${enc(subj)}&body=${enc(letter)}`;
+  window.open(gmail,'_blank');
+  toast('Gmail opened — verify the recipient, drag in your resume, and send ✉️');
+}
+
+function buildSignature(){
+  const c=state.contact||{};
+  const lines=[];
+  if(c.phone)lines.push('📞 '+c.phone);
+  if(c.linkedin)lines.push('🔗 '+c.linkedin);
+  if(c.email)lines.push('✉️ '+c.email);
+  return (c.name?c.name+'\n':'')+lines.join('\n');
+}
+async function genCoverLetter(j){
+  const sig=buildSignature();
+  const sen=state.seniority&&state.seniority!=='auto'?`\nTARGET CAREER STAGE: ${state.seniority}`:'';
+  const prompt=`Write a tailored job-application email that is SPECIFIC to this exact position — not a generic template. Mirror the role's likely priorities and map the candidate's most relevant, quantified achievements to it.
+
+ROLE: ${j.role}
+COMPANY: ${j.company} (${j.companyType}) — ${j.location}
+MARKET: ${state.country}${sen}
+WHY IT FITS (weave in naturally, don't list): ${(j.matchReasons||[]).join('; ')}; ${j.pitch||''}
+
+Rules:
+- 150-210 words, plain text only, no markdown, confident and specific.
+- Begin with "Dear Hiring Team," (recruiter name unknown).
+- First line must name the exact role and company and hook into what they do.
+- One paragraph mapping 2-3 concrete achievements (with real numbers from the resume) to this role's needs.
+- One short line noting the resume is attached.
+- End with a brief call to action, then a blank line, then the sign-off "Best regards," followed by EXACTLY this signature block on its own lines — do not alter it, do not invent any other contact details:
+${sig||'(candidate name)'}
+
+Use only real facts found in the resume below. Do not fabricate companies, dates, or metrics.
+Resume:
+"""${state.resumeText.slice(0,9000)}"""`;
+  let letter=(await callClaude([{role:'user',content:prompt}])).trim();
+  // Safety net: guarantee phone/LinkedIn are present even if the model trimmed them.
+  if(sig){ const need=[state.contact.phone,state.contact.linkedin].filter(Boolean); if(need.some(x=>!letter.includes(x))){ letter=letter.replace(/\s*$/,'')+'\n\n'+sig; } }
+  return letter;
+}
+
+/* ---------- ui helpers ---------- */
+function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display=m?'block':'none';}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),3800);}
+</script>
+</body>
+</html>
