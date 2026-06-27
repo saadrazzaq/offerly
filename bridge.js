@@ -57,10 +57,14 @@ function runClaude(prompt, model) {
 
 // --- server ---------------------------------------------------------------
 const server = http.createServer((req, res) => {
-  // CORS (in case page is opened from file:// too)
+  // CORS — allow the page to call this bridge whether it's opened locally (file://,
+  // http://localhost) or from a hosted HTTPS origin (e.g. the Vercel deployment).
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  // Private Network Access: a public HTTPS page (Vercel) calling http://localhost is a
+  // public→private request; Chrome/Edge require this header on the preflight or it's blocked.
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {

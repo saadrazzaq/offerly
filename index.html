@@ -270,6 +270,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787');
+const HOSTED=(location.protocol!=='http:'); // served from a hosted origin (e.g. Vercel) rather than the local bridge itself
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
 const state={resumeText:"",fileName:"",letterCache:{},jobs:[],candidateName:""};
 
@@ -289,7 +290,10 @@ async function checkBridge(){
     else{dot.style.display='inline-block';dot.style.color='var(--amber)';if(note)note.innerHTML='🟡 Bridge running but Claude binary not found.';}
   }catch(e){
     dot.style.display='inline-block';dot.style.color='var(--red)';dot.title='Bridge offline';
-    if(note)note.innerHTML='🔴 Bridge offline. Run <b>start.cmd</b> in the project folder, then open <a href="'+BRIDGE+'/">'+BRIDGE+'/</a>';
+    if(note)note.innerHTML=HOSTED
+      ? '🔴 Can\'t reach your local bridge at <b>'+BRIDGE+'</b>. This hosted page still runs the AI on <u>your machine</u>: open the project folder and run <b>start.cmd</b> (or <code>node bridge.js</code>), then reload. If it\'s already running, allow this site\'s “insecure / local network” request when your browser prompts.'
+      : '🔴 Bridge offline. Run <b>start.cmd</b> in the project folder, then open <a href="'+BRIDGE+'/">'+BRIDGE+'/</a>';
+    if(HOSTED)showErr('⚠️ The AI runs through a bridge on your own machine. Start it locally (run start.cmd / node bridge.js), then reload this page. Without it, analysis can\'t run — see ⚙ Model for details.');
   }
 }
 checkBridge();
@@ -448,7 +452,9 @@ async function callClaude(messages,maxTokens){
       body:JSON.stringify({prompt,model})
     });
   }catch(e){
-    throw new Error('Cannot reach the local bridge at '+BRIDGE+'. Start it first: run start.cmd (or `node bridge.js`) in the project folder, then open '+BRIDGE+'/');
+    throw new Error(HOSTED
+      ? 'Cannot reach your local bridge at '+BRIDGE+'. This hosted page runs the AI on your own machine — start the bridge locally (run start.cmd or `node bridge.js`), then reload. If it is running, allow the browser\'s local-network/insecure-content prompt for this site.'
+      : 'Cannot reach the local bridge at '+BRIDGE+'. Start it first: run start.cmd (or `node bridge.js`) in the project folder, then open '+BRIDGE+'/');
   }
   if(!res.ok){
     let msg='Bridge error '+res.status;
