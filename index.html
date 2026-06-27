@@ -142,6 +142,9 @@
   .reasons div{display:flex;gap:7px}
   .reasons .tick{color:var(--green);flex:none}
   .miss{font-size:12px;color:var(--mut2)}
+  .applyvia{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--mut2);margin-top:2px}
+  .applyvia b{color:var(--mut);font-weight:700}
+  .applyvia .via-dot{font-size:13px}
   .actions{display:flex;gap:9px;margin-top:auto;padding-top:6px}
   .btn{flex:1;text-align:center;padding:11px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--line);text-decoration:none;transition:.15s;display:flex;align-items:center;justify-content:center;gap:6px}
   .btn.apply{background:var(--grad);color:#fff;border:none}
@@ -413,8 +416,21 @@ ${sen!=='auto'?`Target this level: ${sen}.`:''}
 Do NOT invent application URLs or recruiter emails — the app builds verified search links itself. Provide a careerDomain only when you are confident of the company's primary website domain.
 Mix categories honestly vs the resume: "high" (strong match, fit 78-97), "medium" (good with minor gaps, fit 60-79), "stretch" (aspirational, fit 40-62).
 
+For EACH opportunity, decide the single most realistic channel THIS company accepts applications through in ${country}, and set "applyMethod" to ONE of these exact values:
+- "linkedin"     → active on LinkedIn / LinkedIn Easy Apply (most startups, scale-ups, tech firms, global roles).
+- "indeed"       → commonly posts on Indeed.
+- "glassdoor"    → commonly posts on Glassdoor.
+- "bayt"         → Bayt.com (a leading Middle East / Gulf job board).
+- "naukrigulf"   → NaukriGulf (Gulf / UAE / Saudi roles).
+- "gulftalent"   → GulfTalent (Gulf professional/management roles).
+- "tasc"         → TASC Outsourcing (Gulf staffing/recruitment agency).
+- "hays"         → Hays (global recruitment agency, strong in Gulf/UK/EU).
+- "career_page"  → hires primarily through its own careers site / ATS (Workday, Greenhouse, Lever, Taleo) — typical for MNCs, consulting firms, large enterprises. Requires a confident careerDomain.
+- "email"        → small agencies/boutiques that accept a CV by email. Only set "applyEmail" if you are CONFIDENT of a real, publicly-advertised jobs/careers inbox; otherwise leave applyEmail empty.
+Region guidance: for Gulf / Middle East markets (UAE, Saudi Arabia, Qatar, etc.) strongly prefer regional boards (bayt, naukrigulf, gulftalent) and agencies (tasc, hays) where that company actually recruits. For US / UK / Europe / global, prefer linkedin, indeed, glassdoor, or career_page. Use career_page for MNC/Consulting with a known domain; use email only for small agencies/boutiques. Pick the ONE channel where this specific company most realistically posts THIS role.
+
 Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
-{"opportunities":[{"company":"Real company","companyType":"Startup|Scale-up|MNC|Consulting|Agency","role":"specific title","location":"city, ${country} or Remote","category":"high|medium|stretch","fitScore":0,"careerDomain":"company.com or empty","matchReasons":["2-3"],"missingForRole":["0-2"],"pitch":"one punchy sentence"}]}
+{"opportunities":[{"company":"Real company","companyType":"Startup|Scale-up|MNC|Consulting|Agency","role":"specific title","location":"city, ${country} or Remote","category":"high|medium|stretch","fitScore":0,"careerDomain":"company.com or empty","applyMethod":"linkedin|indeed|glassdoor|bayt|naukrigulf|gulftalent|tasc|hays|career_page|email","applyEmail":"confident public jobs inbox or empty","matchReasons":["2-3"],"missingForRole":["0-2"],"pitch":"one punchy sentence"}]}
 
 Resume:
 """${resume.slice(0,12000)}"""`;
@@ -611,6 +627,7 @@ function cardHTML(j){
   const sc=j.fitScore||0, col=scoreColor(sc);
   const reasons=(j.matchReasons||[]).map(r=>`<div><span class="tick">✓</span><span>${esc(r)}</span></div>`).join('');
   const miss=(j.missingForRole||[]).length?`<div class="miss">📌 To strengthen: ${(j.missingForRole||[]).map(esc).join(', ')}</div>`:'';
+  const m=applyMethodOf(j), badge=PLATFORMS[m];
   return `<div class="job">
     <div class="top">
       <div>
@@ -625,23 +642,69 @@ function cardHTML(j){
     </div>
     <div class="reasons">${reasons}</div>
     ${miss}
+    <div class="applyvia"><span class="via-dot">${badge.icon}</span> Apply via <b>${badge.label}</b></div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
       <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
       <a href="${glassdoorURL(j)}" target="_blank" rel="noopener">Glassdoor</a>
-      ${j.careerDomain?`<a href="https://${esc(j.careerDomain)}/careers" target="_blank" rel="noopener">Careers ↗</a>`:''}
+      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers ↗</a>`:''}
     </div>
-    <div class="actions">
-      <a class="btn apply" href="${applyURL(j)}" target="_blank" rel="noopener">🔗 Apply / View role</a>
-      <button class="btn mail" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ Apply by Email</button>
-    </div>
+    <div class="actions">${applyActions(j,m)}</div>
   </div>`;
+}
+
+/* ---------- apply-channel registry (real, live search/apply links per platform) ---------- */
+function kw(j){return ((j.role||'')+' '+(j.company||'')).trim();}
+// Google search scoped to a board/agency domain — robust when a board's own query
+// params aren't stable; always lands the user on relevant, real listings.
+function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+state.country)}`;}
+function slug(s){return (s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+
+const PLATFORMS={
+  linkedin:   {icon:'🔗',label:'LinkedIn Easy Apply', cta:'Easy Apply on LinkedIn', url:linkedinEasyApplyURL},
+  indeed:     {icon:'🟦',label:'Indeed',              cta:'Apply on Indeed',        url:j=>`https://www.indeed.com/jobs?q=${enc(kw(j))}&l=${enc(state.country)}`},
+  glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Apply on Glassdoor',     url:j=>`https://www.glassdoor.com/Search/results.htm?keyword=${enc(kw(j))}`},
+  bayt:       {icon:'🟧',label:'Bayt',                cta:'Apply on Bayt',          url:j=>`https://www.bayt.com/en/jobs/q/${enc(slug(j.role))}/`},
+  naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Apply on NaukriGulf',    url:j=>`https://www.naukrigulf.com/jobs-search-results?keyword=${enc(kw(j))}`},
+  gulftalent: {icon:'🟦',label:'GulfTalent',          cta:'Apply on GulfTalent',    url:j=>siteSearch('gulftalent.com',j)},
+  tasc:       {icon:'🏢',label:'TASC Outsourcing',    cta:'Apply via TASC',         url:j=>siteSearch('tascoutsourcing.com',j)},
+  hays:       {icon:'🏢',label:'Hays',                cta:'Apply via Hays',         url:j=>siteSearch('hays.com',j)},
+  career_page:{icon:'🏢',label:'Company career page', cta:'Apply on career page',   url:careerURL},
+  email:      {icon:'✉️',label:'Email application',    cta:'Apply by Email',         url:null}
+};
+// Normalize model variants/typos onto known platform keys.
+const METHOD_ALIASES={'indeed plus':'indeed','indeedplus':'indeed','linked in':'linkedin','naukri':'naukrigulf','naukri gulf':'naukrigulf','gulf talent':'gulftalent','careerpage':'career_page','career':'career_page','company':'career_page','website':'career_page','mail':'email'};
+
+/* Pick the realistic apply channel; fall back sensibly when the model omits it. */
+function applyMethodOf(j){
+  let m=(j.applyMethod||'').toLowerCase().trim();
+  m=METHOD_ALIASES[m]||m;
+  if(PLATFORMS[m])return m;
+  return j.careerDomain?'career_page':'linkedin';
+}
+
+/* Channel-specific primary button + a secondary fallback so every card stays actionable. */
+function applyActions(j,m){
+  const mailBtn=`<button class="btn mail" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ Apply by Email</button>`;
+  if(m==='email'){
+    const primary=`<button class="btn apply" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ ${j.applyEmail?'Email '+esc(j.applyEmail):'Apply by Email'}</button>`;
+    const secondary=j.careerDomain
+      ? `<a class="btn mail" href="${careerURL(j)}" target="_blank" rel="noopener">🏢 Career page</a>`
+      : `<a class="btn mail" href="${linkedinEasyApplyURL(j)}" target="_blank" rel="noopener">🔗 LinkedIn</a>`;
+    return primary+secondary;
+  }
+  const p=PLATFORMS[m];
+  return `<a class="btn apply" href="${p.url(j)}" target="_blank" rel="noopener">${p.icon} ${p.cta}</a>`+mailBtn;
 }
 
 /* ---------- link builders (real, live searches) ---------- */
 function enc(s){return encodeURIComponent(s||'');}
 function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+state.country+' careers apply job')}`;}
 function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}`;}
+// LinkedIn jobs search pre-filtered to Easy Apply roles (f_AL=true).
+function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}&f_AL=true`;}
+// Company careers/jobs page when we have a confident domain, else a Google careers search.
+function careerURL(j){return j.careerDomain?`https://${(j.careerDomain||'').replace(/^https?:\/\//,'').replace(/\/+$/,'')}/careers`:applyURL(j);}
 function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||''))}&l=${enc(state.country)}`;}
 function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||''))}`;}
 
@@ -661,11 +724,16 @@ async function emailApply(i){
     }
     btn.classList.remove('loading');btn.textContent='✉️ Apply by Email';
   }
-  const to=j.careerDomain?`careers@${j.careerDomain}`:'';
+  // Use a real public inbox only when the model is confident of one. Otherwise leave
+  // the recipient blank — guessing `careers@<domain>` bounces for most companies — and
+  // let the user paste the verified address from the careers page.
+  const to=(j.applyEmail||'').trim();
   const subj=`Application — ${j.role} at ${j.company}${state.candidateName?(' — '+state.candidateName):''}`;
-  const gmail=`https://mail.google.com/mail/?view=cm&fs=1&to=${enc(to)}&su=${enc(subj)}&body=${enc(letter)}`;
+  const gmail=`https://mail.google.com/mail/?view=cm&fs=1${to?'&to='+enc(to):''}&su=${enc(subj)}&body=${enc(letter)}`;
   window.open(gmail,'_blank');
-  toast('Gmail opened — verify the recipient, drag in your resume, and send ✉️');
+  toast(to
+    ? `Letter drafted to ${to} — drag your resume into the compose window and send ✉️`
+    : 'Letter drafted — To: is left blank on purpose. Find the real application email (use the “Careers ↗” link), paste it in, drag in your resume, and send ✉️');
 }
 
 function buildSignature(){

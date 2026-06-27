@@ -5,7 +5,7 @@ Offerly is a single-page AI job-search copilot. Upload your resume, pick a targe
 - **Deep resume analysis** — seniority, experience, strengths, and market-specific gaps
 - **ATS compatibility score** /100 with a six-area breakdown and quick fixes
 - **20+ real-company opportunities** (startups, scale-ups, MNCs, consulting, agencies) split into **High / Medium / Stretch** with a **fit score** per role
-- **One-click Apply** — opens the real, live job posting (LinkedIn / Indeed / Glassdoor / company careers)
+- **Channel-aware Apply** — for each role the recruiter picks the most realistic application route and the button matches it: LinkedIn Easy Apply, Indeed, Glassdoor, Bayt, NaukriGulf, GulfTalent, TASC, Hays, the company career page, or email — with a regional bias (Gulf boards for Gulf markets, LinkedIn/Indeed for global)
 - **Apply by Email** — generates a cover letter *tailored to that exact role* and opens Gmail compose pre-filled (recipient + subject + letter + your signature). Drag in your resume and send.
 - **Resume improvement suggestions** — prioritized and actionable
 
@@ -45,7 +45,7 @@ Then open **http://localhost:8787/**.
 
 ## Notes & honest limits
 
-- **Job links are live searches, not fabricated URLs.** Apply buttons open real, current postings — nothing is invented. Recruiter emails are best-guess (`careers@domain`) and flagged for you to verify.
+- **Job links are live searches, not fabricated URLs.** Apply buttons open real, current postings — nothing is invented. **Recruiter emails are never guessed** — "Apply by Email" drafts the cover letter and opens Gmail with the **recipient left blank**, because `careers@<domain>`-style guesses bounce for most companies. Find the real application address on the company's careers page (the "Careers ↗" link) and paste it in.
 - **Gmail can't auto-attach files** (browser security). The compose window opens pre-filled; you drag your resume in and send.
 - Because it runs through the local CLI (not the paid API), a full analysis takes ~1.5–2.5 minutes.
 - Your resume and data never leave your machine except in the local call to your own Claude subscription.
