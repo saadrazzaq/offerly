@@ -30,6 +30,11 @@
   .wordmark small{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut2);margin-top:3px}
   .ghost{background:transparent;border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s}
   .ghost:hover{border-color:var(--acc);color:var(--text)}
+  nav.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);padding:4px;border-radius:11px}
+  nav.tabs a{color:var(--mut);text-decoration:none;font-size:13px;font-weight:600;padding:7px 13px;border-radius:8px}
+  nav.tabs a.on{background:var(--card2);color:var(--text)}
+  nav.tabs a:hover{color:var(--text)}
+  @media(max-width:640px){.hbar{flex-wrap:wrap;gap:10px}}
 
   .hero{text-align:center;padding:46px 0 26px}
   .hero h1{font-size:40px;font-weight:800;letter-spacing:-1px;background:linear-gradient(180deg,#fff,#aeb9d6);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -174,6 +179,7 @@
       </div>
       <div class="wordmark">Offerly<small>get the offer</small></div>
     </div>
+    <nav class="tabs"><a href="/" class="on">Find jobs</a><a href="/apply">Bulk apply</a></nav>
     <div style="display:flex;align-items:center;gap:10px">
       <span class="tag" id="bridgeStatus" style="display:none">●</span>
       <button class="ghost" onclick="openSettings()">⚙ Model</button>
@@ -271,6 +277,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 
 const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787');
 const HOSTED=(location.protocol!=='http:'); // served from a hosted origin (e.g. Vercel) rather than the local bridge itself
+if(HOSTED)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=BRIDGE+a.getAttribute('href'));
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
 const state={resumeText:"",fileName:"",letterCache:{},jobs:[],candidateName:""};
 

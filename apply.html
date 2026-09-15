@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Offerly — Bulk apply</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236d8bff'/><stop offset='1' stop-color='%238b5cf6'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><circle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2.6'/><path d='M16 20.5 V12 M12.5 15.5 L16 12 L19.5 15.5' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17; --bg2:#111827; --card:#151c2c; --card2:#1b2436;
+    --line:#243049; --text:#e7ecf5; --mut:#93a0bd; --mut2:#6b7892;
+    --acc:#6d8bff; --acc2:#8b5cf6; --grad:linear-gradient(135deg,#6d8bff,#8b5cf6);
+    --green:#34d399; --amber:#fbbf24; --red:#fb7185; --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;background:
+    radial-gradient(1200px 600px at 80% -10%,rgba(139,92,246,.14),transparent),
+    radial-gradient(1000px 500px at -10% 10%,rgba(109,139,255,.12),transparent),var(--bg);
+    color:var(--text);min-height:100vh;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);background:rgba(11,15,23,.78);border-bottom:1px solid var(--line)}
+  .hbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;max-width:1180px;margin:0 auto;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:18px;letter-spacing:-.3px;color:inherit;text-decoration:none}
+  .logo{width:36px;height:36px;border-radius:10px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 18px rgba(109,139,255,.4)}
+  .wordmark{display:flex;flex-direction:column;line-height:1}
+  .wordmark small{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut2);margin-top:3px}
+  nav.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);padding:4px;border-radius:11px}
+  nav.tabs a{color:var(--mut);text-decoration:none;font-size:13px;font-weight:600;padding:7px 13px;border-radius:8px}
+  nav.tabs a.on{background:var(--card2);color:var(--text)}
+  nav.tabs a:hover{color:var(--text)}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--mut);padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;font-family:inherit}
+  .ghost:hover{border-color:var(--acc);color:var(--text)}
+  .tag{font-size:12px;color:var(--mut);background:var(--card);border:1px solid var(--line);padding:6px 12px;border-radius:20px}
+  @media(max-width:640px){header{position:static}}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+  .hero{padding:40px 0 24px}
+  .hero h1{font-size:34px;font-weight:800;letter-spacing:-.8px;background:linear-gradient(180deg,#fff,#aeb9d6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--mut);margin-top:8px;font-size:15px;max-width:640px}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow)}
+  .grid-setup{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:820px){.grid-setup{grid-template-columns:1fr}}
+  h2{font-size:17px;margin-bottom:4px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:16px}
+
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:24px;text-align:center;cursor:pointer;transition:.18s;background:var(--card2)}
+  .drop:hover,.drop.over{border-color:var(--acc);background:#1d2740}
+  .drop b{display:block;font-size:14px}
+  .drop span{color:var(--mut);font-size:12px}
+  .filemeta{display:none;align-items:center;gap:12px;margin-top:12px;background:var(--card2);border:1px solid var(--line);padding:11px 14px;border-radius:11px}
+  .filemeta .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);flex:none}
+  .filemeta small{color:var(--mut)}
+  .filemeta .ghost{margin-left:auto;padding:5px 10px;font-size:12px}
+
+  label.lab{display:block;font-size:12px;color:var(--mut);margin:0 0 6px;font-weight:600}
+  select,input[type=text],input[type=email],input[type=password],input[type=number],input[type=url],textarea{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:11px;font-size:14px;outline:none;transition:.15s;font-family:inherit}
+  textarea{resize:vertical;line-height:1.55}
+  select:focus,input:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(109,139,255,.15)}
+  .field{margin-bottom:14px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.row2{grid-template-columns:1fr}}
+  .hint{font-size:12px;color:var(--mut2);margin-top:6px}
+
+  .mailstate{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line);padding:11px 14px;border-radius:11px;margin-bottom:16px;font-size:14px}
+  .mailstate .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .mailstate .ghost{margin-left:auto;padding:5px 10px;font-size:12px}
+
+  /* job inputs */
+  .jobsbox{margin-top:18px}
+  .jobhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .jobin{border:1px solid var(--line);background:var(--bg2);border-radius:14px;padding:14px;margin-bottom:12px;display:grid;grid-template-columns:34px 1fr;gap:12px}
+  .jobin.focus{border-color:var(--acc)}
+  .jobin .num{width:30px;height:30px;border-radius:9px;background:var(--card2);border:1px solid var(--line);display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--mut)}
+  .jobin .top{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  .seg{display:inline-flex;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px}
+  .seg button{background:none;border:none;color:var(--mut);font-weight:600;font-size:12px;font-family:inherit;padding:6px 11px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 0 var(--line)}
+  .rm{margin-left:auto;background:none;border:none;color:var(--mut2);cursor:pointer;font-size:13px;padding:4px 8px;border-radius:7px;font-family:inherit}
+  .rm:hover{color:var(--red);background:rgba(251,113,133,.1)}
+  .shot{border:2px dashed var(--line);border-radius:11px;padding:16px;text-align:center;cursor:pointer;background:var(--card2);color:var(--mut);font-size:13px}
+  .shot:hover,.shot.over{border-color:var(--acc)}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .thumb{position:relative;width:92px;height:92px;border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .thumb button{position:absolute;top:3px;right:3px;background:rgba(11,15,23,.85);border:none;color:#fff;border-radius:6px;width:22px;height:22px;cursor:pointer}
+  .toline{margin-top:10px}
+  .toline input{padding:9px 12px;font-size:13px}
+
+  .actionsbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .cta{background:var(--grad);border:none;color:#fff;font-weight:800;font-size:15px;padding:14px 22px;border-radius:13px;cursor:pointer;box-shadow:0 10px 28px rgba(109,139,255,.35);transition:.15s;font-family:inherit}
+  .cta:hover{transform:translateY(-1px)}
+  .cta:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .cta.wide{flex:1;min-width:220px}
+
+  /* drafts */
+  #drafts{margin-top:34px;display:none}
+  .drafthead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .progress{font-size:13px;color:var(--mut)}
+  .draft{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+  .draft.sent{border-color:rgba(52,211,153,.45)}
+  .draft .dtop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px}
+  .draft h3{font-size:16px;line-height:1.3}
+  .draft .meta{color:var(--mut);font-size:13px;margin-top:2px;word-break:break-all}
+  .pill{flex:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+  .pill.working{color:#b9c6ff;border-color:rgba(109,139,255,.45)}
+  .pill.ready{color:#ffe08a;border-color:rgba(251,191,36,.45)}
+  .pill.sent{color:var(--green);border-color:rgba(52,211,153,.45)}
+  .pill.error{color:#ffb3bf;border-color:rgba(251,113,133,.45)}
+  .warn{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:#ffe08a;font-size:13px;padding:9px 12px;border-radius:10px;margin-bottom:12px}
+  .errbox{background:rgba(251,113,133,.08);border:1px solid rgba(251,113,133,.35);color:#ffb3bf;font-size:13px;padding:9px 12px;border-radius:10px;margin-bottom:12px}
+  .note{background:rgba(109,139,255,.08);border:1px solid rgba(109,139,255,.3);color:#c9d3ff;font-size:13px;padding:9px 12px;border-radius:10px;margin-bottom:12px}
+  .draft textarea{min-height:300px;font-size:14px}
+  .dfoot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .attach{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--mut);background:var(--card2);border:1px solid var(--line);padding:7px 11px;border-radius:9px}
+  .dfoot .spacer{flex:1}
+  .btn{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--line);background:var(--card2);color:var(--text);transition:.15s;font-family:inherit}
+  .btn:hover{border-color:var(--acc)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.send{background:var(--grad);border:none;color:#fff;min-width:130px}
+  .btn.send.confirm{background:var(--amber);color:#1b1300}
+  .btn.send.done{background:rgba(52,211,153,.15);color:var(--green)}
+  .skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--card2),#232e45,var(--card2));background-size:200% 100%;animation:sh 1.4s infinite;margin:9px 0}
+  @keyframes sh{to{background-position:-200% 0}}
+  @media (prefers-reduced-motion:reduce){.skeleton{animation:none}.cta:hover{transform:none}}
+
+  .err{display:none;background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.4);color:#ffb3bf;padding:14px 16px;border-radius:12px;margin-top:16px;font-size:14px}
+  footer{text-align:center;color:var(--mut2);font-size:12px;padding:40px 0 30px;line-height:1.7}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--bg2);border:1px solid var(--acc);color:var(--text);padding:12px 20px;border-radius:11px;font-size:14px;box-shadow:var(--shadow);z-index:200;transition:.3s;max-width:90vw}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+
+  .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;overflow:auto}
+  .modal.show{display:flex}
+  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:560px;width:100%;padding:26px;box-shadow:var(--shadow)}
+  .mbox h3{font-size:20px;margin-bottom:6px}
+  .mbox .note a{color:#fff}
+  .check{display:flex;gap:9px;align-items:center;font-size:14px;color:var(--mut);margin-bottom:16px}
+  .mrow{display:flex;gap:10px;margin-top:6px}
+  .mrow .btn{flex:1}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .presets button{font-size:12px;padding:5px 10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <a class="brand" href="/">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="9" stroke="#fff" stroke-width="2.6"/><path d="M16 20.5 V12 M12.5 15.5 L16 12 L19.5 15.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="wordmark">Offerly<small>get the offer</small></div>
+    </a>
+    <nav class="tabs"><a href="/">Find jobs</a><a href="/apply" class="on">Bulk apply</a></nav>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="tag" id="bridgeStatus" style="display:none">●</span>
+      <button class="ghost" onclick="openMail()">✉ Email setup</button>
+      <button class="ghost" onclick="openSettings()">⚙ Model</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Apply to the jobs you found</h1>
+    <p>Add job posts as links, screenshots or pasted text. Offerly writes a formal application for each one, you review and edit, then send each email with your resume attached.</p>
+  </div>
+
+  <div class="grid-setup">
+    <div class="panel">
+      <h2>Your resume</h2>
+      <p class="sub">Attached to every email and used to tailor each letter.</p>
+      <div class="drop" id="drop" tabindex="0" role="button">
+        <b>📄 Drop your latest resume or click to browse</b>
+        <span>PDF, DOCX or TXT</span>
+      </div>
+      <input type="file" id="file" accept=".pdf,.docx,.txt" hidden />
+      <div class="filemeta" id="filemeta">
+        <div class="dot"></div>
+        <div><b id="fname"></b><br><small id="fchars"></small></div>
+        <button class="ghost" onclick="fileInput.click()">Replace</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your details</h2>
+      <p class="sub">Used in the signature. Saved in this browser.</p>
+      <div class="mailstate" id="mailstate"><div class="dot" style="background:var(--mut2)"></div><span>Checking email setup…</span></div>
+      <div class="row2">
+        <div class="field"><label class="lab" for="cName">Full name</label><input type="text" id="cName" autocomplete="name" /></div>
+        <div class="field"><label class="lab" for="cPhone">Phone</label><input type="text" id="cPhone" autocomplete="tel" /></div>
+      </div>
+      <div class="field"><label class="lab" for="cLinkedin">LinkedIn or portfolio link (optional)</label><input type="text" id="cLinkedin" /></div>
+      <div class="field" style="margin-bottom:0">
+        <label class="lab" for="cNotes">Include in every application (optional)</label>
+        <input type="text" id="cNotes" placeholder="e.g. Available to join by 12 October 2026, open to relocating to the UAE" />
+      </div>
+    </div>
+  </div>
+
+  <div class="panel jobsbox">
+    <div class="jobhead">
+      <div>
+        <h2>Jobs to apply for</h2>
+        <p class="sub" style="margin:0">Paste several links at once and they're split into separate jobs. Press Ctrl+V anywhere to add a screenshot.</p>
+      </div>
+    </div>
+    <div id="jobInputs"></div>
+    <div class="actionsbar">
+      <button class="btn" onclick="addJob('url')">+ Add link</button>
+      <button class="btn" onclick="addJob('image')">+ Add screenshot</button>
+      <button class="btn" onclick="addJob('text')">+ Add job text</button>
+      <button class="cta wide" id="genBtn" onclick="generateAll()" disabled>Generate emails</button>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+
+  <section id="drafts">
+    <div class="drafthead">
+      <h2>Review and send</h2>
+      <span class="progress" id="progress"></span>
+    </div>
+    <div id="draftList"></div>
+  </section>
+
+  <footer>
+    Letters are written by your local Claude Code subscription. Emails are sent from your own account through the local bridge.<br/>
+    Nothing is sent until you press Send on a draft.
+  </footer>
+</div>
+
+<!-- Model modal -->
+<div class="modal" id="settings">
+  <div class="mbox">
+    <h3>Model</h3>
+    <p class="sub">Runs through your local bridge and your Claude Code subscription.</p>
+    <div class="field">
+      <label class="lab" for="model">Model</label>
+      <select id="model">
+        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced (recommended)</option>
+        <option value="claude-opus-4-8">Claude Opus 4.8 — deepest analysis</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>
+      </select>
+    </div>
+    <p class="hint" id="bridgeNote" style="margin-bottom:14px">Checking bridge connection…</p>
+    <button class="cta" style="width:100%" onclick="saveSettings()">Save</button>
+  </div>
+</div>
+
+<!-- Email setup modal -->
+<div class="modal" id="mailModal">
+  <div class="mbox">
+    <h3>Email setup</h3>
+    <p class="sub">Applications are sent from this account. Settings are stored in <code>offerly.mail.json</code> on your computer.</p>
+    <div class="presets">
+      <button class="btn" onclick="preset('smtp.gmail.com',587)">Gmail</button>
+      <button class="btn" onclick="preset('smtp.office365.com',587)">Outlook / Microsoft 365</button>
+      <button class="btn" onclick="preset('smtp.mail.yahoo.com',465)">Yahoo</button>
+      <button class="btn" onclick="preset('smtp.zoho.com',465)">Zoho</button>
+    </div>
+    <div class="note" id="gmailNote">For Gmail, turn on 2-Step Verification and create an <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App password</a>. Use it below instead of your normal password.</div>
+    <div class="row2">
+      <div class="field"><label class="lab" for="mHost">SMTP server</label><input type="text" id="mHost" placeholder="smtp.gmail.com" /></div>
+      <div class="field"><label class="lab" for="mPort">Port</label><input type="number" id="mPort" value="587" /></div>
+    </div>
+    <div class="field"><label class="lab" for="mUser">Email address (login)</label><input type="email" id="mUser" placeholder="you@gmail.com" /></div>
+    <div class="field"><label class="lab" for="mPass">App password</label><input type="password" id="mPass" autocomplete="new-password" /><div class="hint" id="mPassHint"></div></div>
+    <div class="field"><label class="lab" for="mFromName">Sender name</label><input type="text" id="mFromName" placeholder="Saad Razzaq" /></div>
+    <label class="check"><input type="checkbox" id="mBcc" /> Send me a copy of every application</label>
+    <div class="mrow">
+      <button class="btn" onclick="closeModal('mailModal')">Cancel</button>
+      <button class="btn" id="mTest" onclick="testMail()">Save and test</button>
+      <button class="btn send" onclick="saveMail()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787');
+const MAX_SHOTS=5, CONCURRENCY=2;
+const state={resume:null,jobs:[],mail:{configured:false},focusId:null};
+let seq=0;
+const $=id=>document.getElementById(id);
+
+/* ---------- init ---------- */
+$('model').value=localStorage.getItem('model')||'claude-sonnet-4-6';
+['cName','cPhone','cLinkedin','cNotes'].forEach(id=>{
+  $(id).value=localStorage.getItem('apply.'+id)||'';
+  $(id).addEventListener('input',()=>localStorage.setItem('apply.'+id,$(id).value));
+});
+
+async function checkBridge(){
+  const dot=$('bridgeStatus'),note=$('bridgeNote');
+  dot.style.display='inline-block';
+  try{
+    const j=await (await fetch(BRIDGE+'/health')).json();
+    dot.style.color=j.ok?'var(--green)':'var(--amber)';
+    note.textContent=j.ok?'🟢 Bridge connected — using your Claude Code subscription.':'🟡 Bridge running but the Claude binary was not found.';
+  }catch{
+    dot.style.color='var(--red)';
+    note.textContent='🔴 Bridge offline. Run start.cmd (or node bridge.js) and open '+BRIDGE+'/apply';
+    showErr('The local bridge is not running. Start it with start.cmd (or node bridge.js), then open '+BRIDGE+'/apply');
+  }
+}
+
+function openSettings(){$('settings').classList.add('show');}
+function saveSettings(){localStorage.setItem('model',$('model').value);closeModal('settings');toast('Model saved');}
+function closeModal(id){$(id).classList.remove('show');}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));});
+
+/* ---------- bridge calls ---------- */
+async function post(path,body){
+  let res;
+  try{
+    res=await fetch(BRIDGE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  }catch{throw new Error('Cannot reach the local bridge. Start it with start.cmd (or node bridge.js).');}
+  let j={};try{j=await res.json();}catch{}
+  if(!res.ok)throw new Error(j.error||('Bridge error '+res.status));
+  return j;
+}
+async function callClaude(prompt,images){
+  const j=await post('/api',{prompt,images,model:localStorage.getItem('model')||'claude-sonnet-4-6'});
+  return j.text||'';
+}
+async function callJSON(prompt,images){
+  let last='';
+  for(let attempt=0;attempt<2;attempt++){
+    const p=attempt===0?prompt:prompt+'\n\nIMPORTANT: your previous reply was NOT valid JSON. Reply with ONLY the raw JSON object — start with { and end with } — no code fences, no commentary.';
+    last=await callClaude(p,images);
+    try{return extractJSON(last);}catch(_){}
+  }
+  throw new Error('Could not read the model reply. It starts with: "'+last.slice(0,90).replace(/\n/g,' ')+'"');
+}
+function repairJSON(t){
+  let inStr=false,esc=false;const stack=[];
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(inStr){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='"')inStr=false;continue;}
+    if(ch==='"')inStr=true;else if(ch==='{'||ch==='[')stack.push(ch);else if(ch==='}'||ch===']')stack.pop();
+  }
+  let f=t;if(inStr)f+='"';f=f.replace(/,\s*$/,'');
+  while(stack.length){f+=stack.pop()==='{'?'}':']';}
+  return f;
+}
+function extractJSON(s){
+  let t=(s||'').trim().replace(/^```(json)?\s*/i,'');
+  const start=t.indexOf('{');if(start<0)throw new Error('no json');
+  t=t.slice(start);
+  let depth=0,inStr=false,esc=false,end=-1;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(inStr){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='"')inStr=false;}
+    else if(ch==='"')inStr=true;else if(ch==='{')depth++;
+    else if(ch==='}'){if(--depth===0){end=i;break;}}
+  }
+  const cands=[];if(end>=0)cands.push(t.slice(0,end+1));cands.push(repairJSON(t));
+  for(const c of cands){try{return JSON.parse(c.replace(/,\s*([}\]])/g,'$1'));}catch(_){}}
+  throw new Error('malformed json');
+}
+
+/* ---------- resume ---------- */
+const drop=$('drop'),fileInput=$('file');
+drop.onclick=()=>fileInput.click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();}};
+wireDrop(drop,files=>files[0]&&handleResume(files[0]));
+fileInput.onchange=()=>{if(fileInput.files[0])handleResume(fileInput.files[0]);fileInput.value='';};
+
+function wireDrop(el,onFiles){
+  ['dragover','dragenter'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();el.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();el.classList.remove('over');}));
+  el.addEventListener('drop',e=>onFiles([...e.dataTransfer.files]));
+}
+function fileToBase64(f){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(new Error('Could not read '+f.name));r.readAsDataURL(f);});
+}
+const MIME={pdf:'application/pdf',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',txt:'text/plain'};
+async function handleResume(f){
+  showErr('');
+  const ext=f.name.split('.').pop().toLowerCase();
+  if(!MIME[ext]){showErr('Upload your resume as a PDF, DOCX or TXT file.');return;}
+  if(f.size>10*1024*1024){showErr('Resume is larger than 10 MB. Most email servers reject attachments that big — export a smaller PDF.');return;}
+  try{
+    let txt='';
+    if(ext==='pdf'){
+      const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+      for(let i=1;i<=pdf.numPages;i++){const c=await (await pdf.getPage(i)).getTextContent();txt+=c.items.map(it=>it.str).join(' ')+'\n';}
+    }else if(ext==='docx'){
+      txt=(await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()})).value;
+    }else txt=await f.text();
+    txt=txt.replace(/\s+\n/g,'\n').trim();
+    if(txt.length<80){showErr('Could not read enough text from this resume. If it is a scanned PDF, upload a text-based PDF or DOCX.');return;}
+    state.resume={name:f.name,type:f.type||MIME[ext],text:txt,data:await fileToBase64(f)};
+    $('fname').textContent=f.name;
+    $('fchars').textContent=Math.max(1,Math.round(f.size/1024))+' KB · '+txt.length.toLocaleString()+' characters read';
+    $('filemeta').style.display='flex';
+    drop.style.display='none';
+    guessContact(txt);
+    refreshGenBtn();
+    document.querySelectorAll('.attach-name').forEach(e=>e.textContent=f.name);
+  }catch(err){showErr('Could not read the resume: '+err.message);}
+}
+function guessContact(txt){
+  if(!$('cPhone').value){const m=txt.match(/(\+?\d[\d\s().-]{8,}\d)/);if(m){$('cPhone').value=m[1].trim();localStorage.setItem('apply.cPhone',$('cPhone').value);}}
+  if(!$('cLinkedin').value){const m=txt.match(/(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[\w-]+\/?/i);if(m){$('cLinkedin').value=m[0];localStorage.setItem('apply.cLinkedin',m[0]);}}
+  if(!$('cName').value){const first=txt.split('\n').map(s=>s.trim()).find(s=>/^[A-Za-z][A-Za-z .'-]{3,40}$/.test(s));if(first){$('cName').value=first;localStorage.setItem('apply.cName',first);}}
+}
+
+/* ---------- job inputs ---------- */
+function addJob(kind,value){
+  const job={id:++seq,kind,value:value||'',images:[],to:'',status:'idle',draft:null,error:''};
+  state.jobs.push(job);
+  renderInputs();
+  const el=document.querySelector(`[data-job="${job.id}"] .main-input`);
+  if(el&&!value)el.focus();
+  if(kind==='image'&&!value)state.focusId=job.id;
+  return job;
+}
+function removeJob(id){
+  state.jobs=state.jobs.filter(j=>j.id!==id);
+  document.querySelector(`[data-draft="${id}"]`)?.remove();
+  renderInputs();updateProgress();
+}
+function setKind(id,kind){const j=job(id);j.kind=kind;j.value='';j.images=[];renderInputs();}
+const job=id=>state.jobs.find(j=>j.id===id);
+const inputJobs=()=>state.jobs.filter(j=>j.status==='idle'||j.status==='error');
+
+function renderInputs(){
+  const box=$('jobInputs');
+  const list=inputJobs();
+  box.innerHTML=list.length?'':'<p class="sub" style="margin:0 0 12px">All jobs have drafts below. Add more jobs here any time.</p>';
+  list.forEach((j,idx)=>{
+    const el=document.createElement('div');
+    el.className='jobin'+(state.focusId===j.id?' focus':'');
+    el.dataset.job=j.id;
+    let body='';
+    if(j.kind==='url')body=`<input type="url" class="main-input" placeholder="https://… job post link" value="${esc(j.value)}">`;
+    else if(j.kind==='text')body=`<textarea class="main-input" rows="5" placeholder="Paste the full job post, including any email address it mentions">${esc(j.value)}</textarea>`;
+    else body=`<div class="shot main-input" tabindex="0" role="button">🖼 Click, drop, or press Ctrl+V to add a screenshot of the job post (up to ${MAX_SHOTS})</div>
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+      <div class="thumbs">${j.images.map((im,i)=>`<div class="thumb"><img alt="Screenshot ${i+1}" src="data:${im.mediaType};base64,${im.data}"><button aria-label="Remove screenshot" data-rmimg="${i}">×</button></div>`).join('')}</div>`;
+    el.innerHTML=`<div class="num">${idx+1}</div><div>
+      <div class="top">
+        <div class="seg" role="tablist">${[['url','Link'],['image','Screenshot'],['text','Text']].map(([k,l])=>`<button role="tab" aria-selected="${j.kind===k}" class="${j.kind===k?'on':''}" data-kind="${k}">${l}</button>`).join('')}</div>
+        ${j.error?`<span class="pill error" title="${esc(j.error)}">Failed — retry</span>`:''}
+        <button class="rm" aria-label="Remove job">Remove</button>
+      </div>
+      ${j.error?`<div class="errbox">${esc(j.error)}</div>`:''}
+      ${body}
+      <div class="toline"><input type="text" class="to-input" placeholder="Send to (optional) — leave blank to use the email in the post" value="${esc(j.to)}"></div>
+    </div>`;
+    box.appendChild(el);
+
+    el.addEventListener('focusin',()=>{state.focusId=j.id;document.querySelectorAll('.jobin').forEach(x=>x.classList.toggle('focus',x===el));});
+    el.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>setKind(j.id,b.dataset.kind));
+    el.querySelector('.rm').onclick=()=>removeJob(j.id);
+    el.querySelector('.to-input').oninput=e=>{j.to=e.target.value;};
+    const main=el.querySelector('.main-input');
+    if(j.kind==='url'){
+      main.oninput=e=>{j.value=e.target.value;refreshGenBtn();};
+      main.onpaste=e=>{
+        const t=(e.clipboardData||window.clipboardData).getData('text');
+        const urls=t.match(/https?:\/\/[^\s<>"']+/g)||[];
+        if(urls.length>1){
+          e.preventDefault();
+          j.value=urls[0];
+          urls.slice(1).forEach(u=>state.jobs.push({id:++seq,kind:'url',value:u,images:[],to:'',status:'idle',draft:null,error:''}));
+          renderInputs();refreshGenBtn();
+          toast(`Added ${urls.length} links as separate jobs`);
+        }
+      };
+    }else if(j.kind==='text'){
+      main.oninput=e=>{j.value=e.target.value;refreshGenBtn();};
+    }else{
+      const fi=el.querySelector('input[type=file]');
+      main.onclick=()=>fi.click();
+      main.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}};
+      fi.onchange=()=>{addImages(j,[...fi.files]);};
+      wireDrop(main,files=>addImages(j,files));
+      el.querySelectorAll('[data-rmimg]').forEach(b=>b.onclick=ev=>{ev.stopPropagation();j.images.splice(+b.dataset.rmimg,1);renderInputs();refreshGenBtn();});
+    }
+  });
+  refreshGenBtn();
+}
+
+async function addImages(j,files){
+  const imgs=files.filter(f=>/^image\/(png|jpe?g|webp|gif)$/.test(f.type));
+  if(!imgs.length){toast('Use PNG, JPG, WEBP or GIF screenshots');return;}
+  for(const f of imgs){
+    if(j.images.length>=MAX_SHOTS){toast(`Up to ${MAX_SHOTS} screenshots per job`);break;}
+    if(f.size>8*1024*1024){toast(f.name+' is over 8 MB — crop it and try again');continue;}
+    j.images.push({mediaType:f.type==='image/jpg'?'image/jpeg':f.type,data:await fileToBase64(f)});
+  }
+  state.focusId=j.id;
+  renderInputs();refreshGenBtn();
+}
+
+// Ctrl+V a screenshot anywhere: goes to the focused screenshot job, or a new one.
+document.addEventListener('paste',e=>{
+  const files=[...(e.clipboardData?.files||[])].filter(f=>f.type.startsWith('image/'));
+  if(!files.length)return;
+  e.preventDefault();
+  let j=job(state.focusId);
+  if(!j||j.kind!=='image'||!inputJobs().includes(j)){
+    const empty=inputJobs().find(x=>x.kind==='image'&&!x.images.length)
+      || inputJobs().find(x=>!x.value&&!x.images.length);
+    if(empty){empty.kind='image';j=empty;}else j=addJob('image');
+  }
+  addImages(j,files);
+});
+
+const hasInput=j=>j.kind==='image'?j.images.length>0:j.value.trim().length>0;
+function refreshGenBtn(){
+  const n=inputJobs().filter(hasInput).length;
+  const b=$('genBtn');
+  b.disabled=!n||!state.resume||state.generating;
+  b.textContent=state.generating?'Generating…':!state.resume?'Upload your resume to continue':n?`Generate ${n} email${n>1?'s':''}`:'Add a job to continue';
+}
+
+/* ---------- generation ---------- */
+async function generateAll(){
+  showErr('');
+  const todo=inputJobs().filter(hasInput);
+  if(!todo.length||!state.resume)return;
+  for(const j of todo){
+    if(j.kind==='url'&&!/^https?:\/\//i.test(j.value.trim()))j.value='https://'+j.value.trim();
+    j.status='queued';j.error='';j.draft=null;
+  }
+  state.generating=true;
+  inputJobs().filter(j=>!hasInput(j)).forEach(j=>state.jobs.splice(state.jobs.indexOf(j),1));
+  addJob('url');
+  $('drafts').style.display='block';
+  todo.forEach(renderDraft);
+  $('drafts').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  updateProgress();
+
+  const queue=[...todo];
+  await Promise.all(Array.from({length:CONCURRENCY},async()=>{
+    while(queue.length)await generateOne(queue.shift());
+  }));
+  state.generating=false;
+  refreshGenBtn();updateProgress();
+  const failed=todo.filter(j=>j.status==='error').length;
+  toast(failed?`${todo.length-failed} ready, ${failed} failed — check the jobs list`:'All drafts are ready to review');
+}
+
+async function generateOne(j){
+  j.status='working';renderDraft(j);updateProgress();
+  try{
+    let source='',images;
+    if(j.kind==='url'){
+      j.stage='Opening the job page…';renderDraft(j);
+      const page=await post('/api/fetch-url',{url:j.value.trim()});
+      j.sourceUrl=page.url;
+      source=`SOURCE: ${page.url}\nPAGE TITLE: ${page.title}\n`
+        +(page.jsonLd?`STRUCTURED JOB DATA:\n${page.jsonLd}\n`:'')
+        +(page.emails.length?`EMAIL ADDRESSES FOUND ON THE PAGE: ${page.emails.join(', ')}\n`:'EMAIL ADDRESSES FOUND ON THE PAGE: none\n')
+        +`PAGE TEXT:\n${page.text}`;
+    }else if(j.kind==='text'){
+      source=j.value.trim().slice(0,20000);
+    }else{
+      images=j.images;
+      source=`The job post is in ${images.length>1?'these screenshot files':'this screenshot file'}. Open ${images.length>1?'each one':'it'} with the Read tool and read it carefully:\n{{IMAGES}}`;
+    }
+    j.stage='Writing the application…';renderDraft(j);
+    const d=await callJSON(buildPrompt(source),images);
+    const to=(j.to||d.recipientEmail||'').trim();
+    j.draft={
+      company:d.company||'',role:d.role||'',location:d.location||'',
+      to,subject:(d.subject||'').trim(),body:(d.body||'').trim(),
+      instructions:(d.applyInstructions||'').trim(),
+      emailFromPost:!!d.recipientEmail,
+    };
+    if(!j.draft.body)throw new Error('The model returned an empty letter. Try again.');
+    j.status='ready';
+  }catch(err){
+    j.status='error';j.error=err.message||String(err);
+    document.querySelector(`[data-draft="${j.id}"]`)?.remove();
+    renderInputs();
+  }
+  j.stage='';
+  if(j.status==='ready')renderDraft(j);
+  updateProgress();
+}
+
+function signature(){
+  return [$('cName').value.trim(),$('cPhone').value.trim(),$('cLinkedin').value.trim()].filter(Boolean).join('\n');
+}
+function buildPrompt(source){
+  const sig=signature()||'(use the candidate name from the resume)';
+  const notes=$('cNotes').value.trim();
+  const name=$('cName').value.trim();
+  return `You are an expert career writer. Read the job post and write a formal job application email from the candidate, tailored to this exact post.
+
+Reply with ONLY this JSON object (no markdown, no commentary):
+{"company":"","role":"","location":"","recipientEmail":"","recipientName":"","applyInstructions":"","subject":"","body":""}
+
+Field rules:
+- recipientEmail: the address the post says to send applications to. Copy it exactly. If the post does not clearly give an application email, use "". Never guess or construct an address. Ignore addresses that are clearly not for applications (privacy, support, noreply).
+- recipientName: the contact person's name if the post gives one, else "".
+- applyInstructions: special instructions from the post that the candidate must follow (required subject format, reference number, documents requested, deadline, questions to answer) in under 30 words, else "".
+- subject: if the post asks for a subject format, follow it exactly. Otherwise "Application for <Role> – ${name||'<Candidate Name>'}", adding the job reference number if the post has one.
+- body: plain text, formal and specific, 170–240 words.
+  • Greeting: "Dear <recipientName>," if known, otherwise "Dear Hiring Manager,".
+  • Opening names the exact role and company and where the post was seen if known.
+  • One or two paragraphs linking 2–3 concrete, quantified achievements from the resume to the post's main requirements.
+  • If the post asks for things like availability, notice period, visa status or expected salary, answer only with facts from the resume or the candidate notes. If a fact is unknown, leave it out. Never invent.
+  • Say the resume is attached.
+  • Close with a short line inviting an interview, a blank line, "Best regards,", then exactly this signature on its own lines:
+${sig}
+- Use only facts from the resume. Do not invent employers, dates, degrees or numbers.
+- Use \\n for line breaks inside JSON strings.
+${notes?`\nCANDIDATE NOTES (include naturally where relevant): ${notes}\n`:''}
+JOB POST:
+"""
+${source}
+"""
+
+RESUME:
+"""
+${state.resume.text.slice(0,12000)}
+"""`;
+}
+
+/* ---------- drafts ---------- */
+function renderDraft(j){
+  const list=$('draftList');
+  let card=list.querySelector(`[data-draft="${j.id}"]`);
+  if(!card){card=document.createElement('article');card.dataset.draft=j.id;list.appendChild(card);}
+  card.className='draft'+(j.status==='sent'?' sent':'');
+  const d=j.draft;
+  const label=j.kind==='url'?j.value:j.kind==='image'?`${j.images.length} screenshot${j.images.length>1?'s':''}`:j.value.slice(0,90)+'…';
+  const pill={queued:['','Waiting'],working:['working','Writing…'],ready:['ready','Ready to review'],sending:['working','Sending…'],sent:['sent','Sent '+(j.sentAt||'')]}[j.status]||['',''];
+
+  if(!d){
+    card.innerHTML=`<div class="dtop"><div><h3>${j.status==='queued'?'Waiting in line':'Working on it'}</h3><div class="meta">${esc(label)}</div></div><span class="pill ${pill[0]}">${pill[1]}</span></div>
+      <div class="meta" style="margin-bottom:8px">${esc(j.stage||'')}</div>
+      <div class="skeleton" style="width:60%"></div><div class="skeleton"></div><div class="skeleton" style="width:85%"></div>`;
+    return;
+  }
+  const locked=j.status==='sent'||j.status==='sending';
+  card.innerHTML=`
+    <div class="dtop">
+      <div><h3>${esc(d.role||'Untitled role')}${d.company?' at '+esc(d.company):''}</h3>
+      <div class="meta">${esc([d.location,j.kind==='url'?(j.sourceUrl||j.value):label].filter(Boolean).join(' — '))}</div></div>
+      <span class="pill ${pill[0]}">${pill[1]}</span>
+    </div>
+    ${!d.to?`<div class="warn">The post doesn't list an application email. Add the recipient address before sending.</div>`:''}
+    ${d.instructions?`<div class="note">Post instructions: ${esc(d.instructions)}</div>`:''}
+    ${j.sendError?`<div class="errbox">${esc(j.sendError)}</div>`:''}
+    <div class="row2">
+      <div class="field"><label class="lab">To</label><input type="text" data-f="to" value="${esc(d.to)}" placeholder="hr@company.com" ${locked?'disabled':''}></div>
+      <div class="field"><label class="lab">Subject</label><input type="text" data-f="subject" value="${esc(d.subject)}" ${locked?'disabled':''}></div>
+    </div>
+    <div class="field" style="margin-bottom:0"><label class="lab">Message</label><textarea data-f="body" ${locked?'disabled':''}>${esc(d.body)}</textarea></div>
+    <div class="dfoot">
+      <span class="attach">📎 <span class="attach-name">${esc(state.resume?.name||'No resume')}</span></span>
+      <span class="spacer"></span>
+      <button class="btn" data-a="remove" ${j.status==='sending'?'disabled':''}>${j.status==='sent'?'Hide':'Discard'}</button>
+      ${j.status!=='sent'?`<button class="btn" data-a="regen" ${locked?'disabled':''}>Rewrite</button>`:''}
+      <button class="btn send ${j.status==='sent'?'done':''}" data-a="send" ${locked?'disabled':''}>${j.status==='sent'?'✓ Sent':j.status==='sending'?'Sending…':'Send'}</button>
+    </div>`;
+
+  card.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('input',()=>{d[inp.dataset.f]=inp.value;}));
+  card.querySelector('[data-a=remove]').onclick=()=>{
+    if(j.status!=='sent'&&!confirm('Discard this draft?'))return;
+    state.jobs=state.jobs.filter(x=>x.id!==j.id);card.remove();updateProgress();
+  };
+  card.querySelector('[data-a=regen]')?.addEventListener('click',()=>{j.to=d.to;j.draft=null;j.sendError='';generateOne(j);});
+  const sendBtn=card.querySelector('[data-a=send]');
+  sendBtn.onclick=()=>{
+    if(sendBtn.classList.contains('confirm')){clearTimeout(sendBtn._t);sendDraft(j);return;}
+    const problem=validate(d);
+    if(problem){toast(problem);return;}
+    sendBtn.classList.add('confirm');
+    sendBtn.textContent='Confirm send';
+    sendBtn._t=setTimeout(()=>{sendBtn.classList.remove('confirm');sendBtn.textContent='Send';},4000);
+  };
+}
+
+const EMAIL_RE=/^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
+function validate(d){
+  if(!state.mail.configured)return 'Set up email sending first (✉ Email setup)';
+  if(!state.resume)return 'Upload your resume first';
+  const addrs=d.to.split(/[,;\s]+/).filter(Boolean);
+  if(!addrs.length)return 'Add a recipient email address';
+  const bad=addrs.find(a=>!EMAIL_RE.test(a));
+  if(bad)return `"${bad}" is not a valid email address`;
+  if(!d.subject.trim())return 'Add a subject line';
+  if(d.body.trim().length<50)return 'The message is too short';
+  if(/\[[^\]]*(name|company|position)[^\]]*\]/i.test(d.body))return 'The message still has a placeholder in brackets — fill it in first';
+  return '';
+}
+
+async function sendDraft(j){
+  const d=j.draft;
+  const problem=validate(d);
+  if(problem){toast(problem);if(!state.mail.configured)openMail();return;}
+  j.status='sending';j.sendError='';renderDraft(j);updateProgress();
+  try{
+    await post('/api/send-email',{
+      to:d.to,subject:d.subject,body:d.body,
+      attachment:{filename:state.resume.name,contentType:state.resume.type,data:state.resume.data},
+    });
+    j.status='sent';
+    j.sentAt=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    toast(`Sent to ${d.to}`);
+  }catch(err){
+    j.status='ready';j.sendError='Not sent: '+err.message;
+  }
+  renderDraft(j);updateProgress();
+}
+
+function updateProgress(){
+  const drafts=state.jobs.filter(j=>['queued','working','ready','sending','sent'].includes(j.status));
+  const c=s=>drafts.filter(j=>j.status===s).length;
+  const busy=c('queued')+c('working');
+  $('progress').textContent=drafts.length?[busy&&`${busy} in progress`,c('ready')&&`${c('ready')} to review`,c('sent')&&`${c('sent')} sent`].filter(Boolean).join(' · '):'';
+  if(!drafts.length)$('drafts').style.display='none';
+}
+
+/* ---------- email setup ---------- */
+async function loadMailState(){
+  try{
+    const r=await fetch(BRIDGE+'/api/mail-config');
+    state.mail=await r.json();
+    if(!r.ok)throw new Error(state.mail.error);
+  }catch(e){state.mail={configured:false,error:e.message};}
+  const m=state.mail,box=$('mailstate');
+  box.innerHTML=m.configured
+    ?`<div class="dot" style="background:var(--green)"></div><span>Sending from <b>${esc(m.fromEmail||m.user)}</b></span><button class="ghost" onclick="openMail()">Change</button>`
+    :`<div class="dot" style="background:var(--amber)"></div><span>${m.error?esc(m.error):'Email sending is not set up'}</span><button class="ghost" onclick="openMail()">Set up</button>`;
+}
+function openMail(){
+  const m=state.mail||{};
+  $('mHost').value=m.host||'';$('mPort').value=m.port||587;$('mUser').value=m.user||'';
+  $('mPass').value='';$('mFromName').value=m.fromName||$('cName').value||'';$('mBcc').checked=!!m.bccSelf;
+  $('mPassHint').textContent=m.hasPassword?'A password is saved. Leave blank to keep it.':'';
+  $('mailModal').classList.add('show');
+}
+function preset(host,port){$('mHost').value=host;$('mPort').value=port;}
+async function saveMail(silent){
+  try{
+    await post('/api/mail-config',{host:$('mHost').value,port:$('mPort').value,user:$('mUser').value,pass:$('mPass').value,fromName:$('mFromName').value,bccSelf:$('mBcc').checked});
+    await loadMailState();
+    if(!silent){closeModal('mailModal');toast('Email settings saved');}
+    return true;
+  }catch(e){toast(e.message);return false;}
+}
+async function testMail(){
+  const b=$('mTest');b.disabled=true;b.textContent='Testing…';
+  try{
+    if(await saveMail(true)){
+      await post('/api/mail-test',{});
+      $('mPass').value='';$('mPassHint').textContent='A password is saved. Leave blank to keep it.';
+      toast('Connected — you can send applications');
+    }
+  }catch(e){toast('Connection failed: '+e.message);}
+  b.disabled=false;b.textContent='Save and test';
+}
+
+/* ---------- ui helpers ---------- */
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function showErr(m){const e=$('err');e.textContent=m;e.style.display=m?'block':'none';}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),4000);}
+/* ---------- start ---------- */
+addJob('url');
+checkBridge();
+loadMailState();
+
+window.addEventListener('beforeunload',e=>{if(state.jobs.some(j=>['working','queued','ready','sending'].includes(j.status))){e.preventDefault();e.returnValue='';}});
+</script>
+</body>
+</html>
