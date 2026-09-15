@@ -11,3 +11,6 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+
+# Email settings — contains your SMTP app password
+offerly.mail.json
