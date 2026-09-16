@@ -8,6 +8,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{
     --bg:#0b0f17; --bg2:#111827; --card:#151c2c; --card2:#1b2436;
@@ -56,18 +57,37 @@
   .filemeta small{color:var(--mut)}
 
   label.lab{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut2);margin:0 0 7px;font-weight:700}
-  select,input[type=text],input[type=password]{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:12px 13px;border-radius:11px;font-size:14px;outline:none;transition:.15s}
-  select:focus,input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(109,139,255,.15)}
+  select,input[type=text],input[type=password],textarea{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--text);padding:12px 13px;border-radius:11px;font-size:14px;outline:none;transition:.15s;font-family:inherit}
+  textarea{resize:vertical;line-height:1.55}
+  select:focus,input:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(109,139,255,.15)}
   .field{margin-bottom:16px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.row2{grid-template-columns:1fr}}
+  .check{display:flex;gap:9px;align-items:center;font-size:14px;color:var(--mut);margin:4px 0 16px}
+  .mrow{display:flex;gap:10px;margin-top:6px}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .presets .btn{flex:none;font-size:12px;padding:7px 12px}
+  .cta.inline{width:auto;margin-top:0;padding:12px 22px;font-size:14px}
+  .cta.inline.confirm{background:var(--amber);color:#1b1300;box-shadow:none}
+  .infobox{background:rgba(109,139,255,.08);border:1px solid rgba(109,139,255,.3);color:#c9d3ff;font-size:12px;padding:9px 12px;border-radius:10px;margin-bottom:14px;line-height:1.5}
+  .infobox a{color:#fff}
+  .warnbox{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:#ffe08a;font-size:13px;padding:9px 12px;border-radius:10px;margin-bottom:14px}
+  .mailstate{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line);padding:10px 13px;border-radius:11px;margin-bottom:14px;font-size:13px}
+  .mailstate .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .mailstate .ghost{margin-left:auto;padding:5px 10px;font-size:12px}
+  .attach{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--mut);background:var(--card2);border:1px solid var(--line);padding:7px 11px;border-radius:9px}
+  .skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--card2),#232e45,var(--card2));background-size:200% 100%;animation:sh 1.4s infinite;margin:9px 0}
+  @keyframes sh{to{background-position:-200% 0}}
+  @media (prefers-reduced-motion:reduce){.skeleton{animation:none}}
 
   .cta{width:100%;background:var(--grad);border:none;color:#fff;font-weight:800;font-size:16px;padding:15px;border-radius:13px;cursor:pointer;margin-top:6px;box-shadow:0 10px 28px rgba(109,139,255,.35);transition:.15s;letter-spacing:.2px}
   .cta:hover{transform:translateY(-1px);box-shadow:0 14px 34px rgba(109,139,255,.5)}
   .cta:disabled{opacity:.55;cursor:not-allowed;transform:none}
 
   /* settings drawer */
-  .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+  .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;overflow:auto}
   .modal.show{display:flex}
-  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:520px;width:100%;padding:26px;box-shadow:var(--shadow)}
+  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:520px;width:100%;padding:26px;box-shadow:var(--shadow);max-height:calc(100vh - 40px);overflow-y:auto}
   .mbox h3{font-size:20px;margin-bottom:6px}
   .mbox p.sub{color:var(--mut);font-size:13px;margin-bottom:18px}
   .keyrow{display:flex;gap:8px}
@@ -182,6 +202,7 @@
     <nav class="tabs"><a href="/" class="on">Find jobs</a><a href="/apply">Bulk apply</a></nav>
     <div style="display:flex;align-items:center;gap:10px">
       <span class="tag" id="bridgeStatus" style="display:none">●</span>
+      <button class="ghost" onclick="openMail()">✉ Email</button>
       <button class="ghost" onclick="openSettings()">⚙ Model</button>
     </div>
   </div>
@@ -194,7 +215,7 @@
     <div class="tagchips">
       <span class="tag">🎯 Fit scores /100</span>
       <span class="tag">🏢 Startups · Scale-ups · MNCs · Consulting</span>
-      <span class="tag">✉️ 1-click Gmail apply</span>
+      <span class="tag">✉️ Generate, review &amp; send emails</span>
       <span class="tag">🔗 Live job-board links</span>
       <span class="tag">📈 Resume improvements</span>
     </div>
@@ -211,7 +232,8 @@
       <input type="file" id="file" accept=".pdf,.docx,.txt" hidden />
       <div class="filemeta" id="filemeta">
         <div class="dot"></div>
-        <div><b id="fname"></b><br><small id="fchars"></small></div>
+        <div style="flex:1"><b id="fname"></b><br><small id="fchars"></small></div>
+        <button class="ghost" id="resumeDownloadBtn" style="display:none;padding:6px 10px;font-size:12px" onclick="redownloadResume()">⬇ PDF</button>
       </div>
     </div>
 
@@ -248,7 +270,7 @@
   <footer>
     Powered locally by your Claude Code subscription — no API key, no extra credits, resume stays on your machine.<br/>
     Job links open real, live searches on LinkedIn / Indeed / Glassdoor / company career pages — nothing is fabricated.<br/>
-    Gmail can't auto-attach files: the compose window opens pre-filled, just drag your resume in &amp; send.
+    ✉️ Apply by Email writes a tailored letter, lets you review and edit it, then sends it from your own account with your resume attached — set up sending once in ✉ Email.
   </footer>
 </div>
 
@@ -270,6 +292,92 @@
   </div>
 </div>
 
+<!-- Email setup modal -->
+<div class="modal" id="mailModal">
+  <div class="mbox">
+    <h3>Email setup</h3>
+    <p class="sub">Applications are sent from this account. Settings are stored in <code>offerly.mail.json</code> on your computer.</p>
+    <div class="presets">
+      <button class="btn" type="button" onclick="preset('smtp.gmail.com',587)">Gmail</button>
+      <button class="btn" type="button" onclick="preset('smtp.office365.com',587)">Outlook / Microsoft 365</button>
+      <button class="btn" type="button" onclick="preset('smtp.mail.yahoo.com',465)">Yahoo</button>
+      <button class="btn" type="button" onclick="preset('smtp.zoho.com',465)">Zoho</button>
+    </div>
+    <div class="infobox">For Gmail, turn on 2-Step Verification and create an <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App password</a>. Use it below instead of your normal password.</div>
+    <div class="row2">
+      <div class="field"><label class="lab">SMTP server</label><input type="text" id="mHost" placeholder="smtp.gmail.com"></div>
+      <div class="field"><label class="lab">Port</label><input type="text" id="mPort" value="587"></div>
+    </div>
+    <div class="field"><label class="lab">Email address (login)</label><input type="text" id="mUser" placeholder="you@gmail.com"></div>
+    <div class="field"><label class="lab">App password</label><input type="password" id="mPass" autocomplete="new-password"><div class="note" id="mPassHint" style="margin-top:6px"></div></div>
+    <div class="field"><label class="lab">Sender name</label><input type="text" id="mFromName" placeholder="Your name"></div>
+    <label class="check"><input type="checkbox" id="mBcc"> Send me a copy of every application</label>
+    <div class="mrow">
+      <button class="ghost" style="flex:1" onclick="closeModal('mailModal')">Cancel</button>
+      <button class="ghost" style="flex:1" id="mTest" onclick="testMail()">Save and test</button>
+      <button class="cta inline" style="flex:1" onclick="saveMail()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Email draft / review / send modal -->
+<div class="modal" id="draftModal">
+  <div class="mbox" style="max-width:640px">
+    <h3 id="draftTitle">Application email</h3>
+    <p class="sub" id="draftSub" style="margin-bottom:14px"></p>
+    <div class="mailstate" id="draftMailState"></div>
+    <div id="draftLoading">
+      <div class="skeleton" style="width:60%"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton" style="width:85%"></div>
+      <div class="skeleton" style="width:70%"></div>
+    </div>
+    <div id="draftFields" style="display:none">
+      <div id="draftWarn"></div>
+      <div class="row2">
+        <div class="field"><label class="lab">To</label><input type="text" id="draftTo" placeholder="hr@company.com"></div>
+        <div class="field"><label class="lab">Subject</label><input type="text" id="draftSubject"></div>
+      </div>
+      <div class="field" style="margin-bottom:10px"><label class="lab">Message</label><textarea id="draftMessage" rows="11"></textarea></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="attach">📎 <span id="draftAttachName">No resume</span></span>
+        <span style="flex:1"></span>
+        <button class="ghost" onclick="closeModal('draftModal')">Cancel</button>
+        <button class="ghost" onclick="regenDraft()">Rewrite</button>
+        <button class="cta inline" id="draftSendBtn" onclick="sendDraftClick()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resume fix / review modal -->
+<div class="modal" id="resumeModal">
+  <div class="mbox" style="max-width:680px">
+    <h3>Review your updated resume</h3>
+    <p class="sub" style="margin-bottom:14px">AI rewrote your resume to apply the improvements and ATS fixes above, using only facts already in your original resume. Review it carefully, edit anything that doesn't sound like you, then confirm.</p>
+    <div id="resumeFixLoading">
+      <div class="skeleton" style="width:50%"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton" style="width:90%"></div>
+      <div class="skeleton" style="width:75%"></div>
+      <div class="skeleton" style="width:85%"></div>
+    </div>
+    <div id="resumeFixFields" style="display:none">
+      <div id="resumeChanges"></div>
+      <div class="field" style="margin-bottom:10px">
+        <label class="lab">Updated resume</label>
+        <textarea id="resumeEditText" rows="18" style="font-family:Consolas,Menlo,monospace;font-size:12.5px"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="flex:1"></span>
+        <button class="ghost" onclick="closeModal('resumeModal')">Cancel</button>
+        <button class="ghost" onclick="regenResumeFix()">Rewrite again</button>
+        <button class="cta inline" onclick="confirmResumeFix()">✓ Reviewed — download &amp; use</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -279,7 +387,8 @@ const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787
 const HOSTED=(location.protocol!=='http:'); // served from a hosted origin (e.g. Vercel) rather than the local bridge itself
 if(HOSTED)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=BRIDGE+a.getAttribute('href'));
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
-const state={resumeText:"",fileName:"",letterCache:{},jobs:[],candidateName:""};
+const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],candidateName:"",mail:{configured:false}};
+const $=id=>document.getElementById(id);
 
 /* ---------- init ---------- */
 const csel=document.getElementById('country');
@@ -304,15 +413,18 @@ async function checkBridge(){
   }
 }
 checkBridge();
+loadMailState();
 
 /* ---------- settings ---------- */
 function openSettings(){document.getElementById('settings').classList.add('show');}
 function saveSettings(){
   localStorage.setItem('model',document.getElementById('model').value);
-  document.getElementById('settings').classList.remove('show');
+  closeModal('settings');
   toast('Saved ✓');
 }
-document.getElementById('settings').addEventListener('click',e=>{if(e.target.id==='settings')e.target.classList.remove('show');});
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));});
 
 /* ---------- file upload ---------- */
 const drop=document.getElementById('drop'),fileInput=document.getElementById('file');
@@ -322,8 +434,13 @@ drop.onclick=()=>fileInput.click();
 drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
 fileInput.onchange=()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);};
 
+const MIME={pdf:'application/pdf',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',txt:'text/plain'};
+function fileToBase64(f){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=()=>rej(new Error('Could not read '+f.name));r.readAsDataURL(f);});
+}
 async function handleFile(f){
   showErr('');
+  if(f.size>10*1024*1024){showErr('Resume is larger than 10 MB. Most email servers reject attachments that big — export a smaller PDF.');return;}
   state.fileName=f.name;
   try{
     let txt="";
@@ -345,6 +462,9 @@ async function handleFile(f){
     txt=txt.replace(/\s+\n/g,'\n').trim();
     if(txt.length<80){showErr('Could not read enough text from this file. If it is a scanned/image PDF, please upload a text-based PDF or DOCX.');return;}
     state.resumeText=txt;
+    const ext=f.name.split('.').pop().toLowerCase();
+    state.resumeFile={name:f.name,type:f.type||MIME[ext]||'application/octet-stream',data:await fileToBase64(f)};
+    document.getElementById('resumeDownloadBtn').style.display='none';
     document.getElementById('fname').textContent=f.name;
     document.getElementById('fchars').textContent=txt.length.toLocaleString()+' characters parsed';
     document.getElementById('filemeta').style.display='flex';
@@ -390,7 +510,9 @@ async function analyze(){
     state.contact={name:state.candidateName,email:analysis.candidateEmail||"",phone:analysis.candidatePhone||"",linkedin:analysis.candidateLinkedIn||""};
     state.country=country;
     state.seniority=sen;
-    state.letterCache={};
+    state.drafts={};
+    state.resumeImprovements=improvements;
+    state.lastAnalysis=analysis;
     renderResults(parsed);
   }catch(err){
     showErr(err.message||String(err));
@@ -572,7 +694,7 @@ function renderResults(d){
   }
 
   if((d.resumeImprovements||[]).length){
-    html+=`<div class="secttitle">📈 Resume Improvements</div><div class="panel">`;
+    html+=`<div class="secttitle">📈 Resume Improvements<button class="ghost" style="margin-left:auto;font-size:12px" onclick="openResumeFix()">✨ Fix my resume</button></div><div class="panel">`;
     d.resumeImprovements.forEach(it=>{
       const p=(it.priority||'low').toLowerCase();
       html+=`<div class="imp"><div class="prio ${p}">${esc(p)}</div><div class="body"><b>${esc(it.title)}</b><p>${esc(it.detail)}</p></div></div>`;
@@ -698,9 +820,9 @@ function applyMethodOf(j){
 
 /* Channel-specific primary button + a secondary fallback so every card stays actionable. */
 function applyActions(j,m){
-  const mailBtn=`<button class="btn mail" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ Apply by Email</button>`;
+  const mailBtn=`<button class="btn mail" id="mail-${j._i}" onclick="openEmailDraft(${j._i})">✉️ Apply by Email</button>`;
   if(m==='email'){
-    const primary=`<button class="btn apply" id="mail-${j._i}" onclick="emailApply(${j._i})">✉️ ${j.applyEmail?'Email '+esc(j.applyEmail):'Apply by Email'}</button>`;
+    const primary=`<button class="btn apply" id="mail-${j._i}" onclick="openEmailDraft(${j._i})">✉️ ${j.applyEmail?'Email '+esc(j.applyEmail):'Apply by Email'}</button>`;
     const secondary=j.careerDomain
       ? `<a class="btn mail" href="${careerURL(j)}" target="_blank" rel="noopener">🏢 Career page</a>`
       : `<a class="btn mail" href="${linkedinEasyApplyURL(j)}" target="_blank" rel="noopener">🔗 LinkedIn</a>`;
@@ -721,34 +843,7 @@ function careerURL(j){return j.careerDomain?`https://${(j.careerDomain||'').repl
 function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||''))}&l=${enc(state.country)}`;}
 function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||''))}`;}
 
-/* ---------- email apply ---------- */
-async function emailApply(i){
-  const j=state.jobs[i];
-  const btn=document.getElementById('mail-'+i);
-  let letter=state.letterCache[i];
-  if(!letter){
-    btn.classList.add('loading');btn.textContent='✍️ Writing letter…';
-    try{
-      letter=await genCoverLetter(j);
-      state.letterCache[i]=letter;
-    }catch(err){
-      btn.classList.remove('loading');btn.textContent='✉️ Apply by Email';
-      toast('Cover letter failed: '+(err.message||err));return;
-    }
-    btn.classList.remove('loading');btn.textContent='✉️ Apply by Email';
-  }
-  // Use a real public inbox only when the model is confident of one. Otherwise leave
-  // the recipient blank — guessing `careers@<domain>` bounces for most companies — and
-  // let the user paste the verified address from the careers page.
-  const to=(j.applyEmail||'').trim();
-  const subj=`Application — ${j.role} at ${j.company}${state.candidateName?(' — '+state.candidateName):''}`;
-  const gmail=`https://mail.google.com/mail/?view=cm&fs=1${to?'&to='+enc(to):''}&su=${enc(subj)}&body=${enc(letter)}`;
-  window.open(gmail,'_blank');
-  toast(to
-    ? `Letter drafted to ${to} — drag your resume into the compose window and send ✉️`
-    : 'Letter drafted — To: is left blank on purpose. Find the real application email (use the “Careers ↗” link), paste it in, drag in your resume, and send ✉️');
-}
-
+/* ---------- email apply: generate → review → send ---------- */
 function buildSignature(){
   const c=state.contact||{};
   const lines=[];
@@ -757,32 +852,297 @@ function buildSignature(){
   if(c.email)lines.push('✉️ '+c.email);
   return (c.name?c.name+'\n':'')+lines.join('\n');
 }
-async function genCoverLetter(j){
+function buildEmailPrompt(j){
   const sig=buildSignature();
   const sen=state.seniority&&state.seniority!=='auto'?`\nTARGET CAREER STAGE: ${state.seniority}`:'';
-  const prompt=`Write a tailored job-application email that is SPECIFIC to this exact position — not a generic template. Mirror the role's likely priorities and map the candidate's most relevant, quantified achievements to it.
+  const name=state.candidateName||'';
+  return `Write a tailored job-application email that is SPECIFIC to this exact position — not a generic template. Mirror the role's likely priorities and map the candidate's most relevant, quantified achievements to it.
 
 ROLE: ${j.role}
-COMPANY: ${j.company} (${j.companyType}) — ${j.location}
+COMPANY: ${j.company} (${j.companyType||''}) — ${j.location||''}
 MARKET: ${state.country}${sen}
 WHY IT FITS (weave in naturally, don't list): ${(j.matchReasons||[]).join('; ')}; ${j.pitch||''}
 
-Rules:
-- 150-210 words, plain text only, no markdown, confident and specific.
-- Begin with "Dear Hiring Team," (recruiter name unknown).
-- First line must name the exact role and company and hook into what they do.
-- One paragraph mapping 2-3 concrete achievements (with real numbers from the resume) to this role's needs.
-- One short line noting the resume is attached.
-- End with a brief call to action, then a blank line, then the sign-off "Best regards," followed by EXACTLY this signature block on its own lines — do not alter it, do not invent any other contact details:
-${sig||'(candidate name)'}
+Reply with ONLY this JSON object (no markdown, no commentary): {"subject":"","body":""}
 
-Use only real facts found in the resume below. Do not fabricate companies, dates, or metrics.
+Field rules:
+- subject: "Application for ${j.role} – ${name||'<Candidate Name>'}".
+- body: plain text only (use \\n for line breaks in the JSON string), 150-210 words, confident and specific.
+  • Begin with "Dear Hiring Team," (recruiter name unknown).
+  • First line must name the exact role and company and hook into what they do.
+  • One paragraph mapping 2-3 concrete achievements (with real numbers from the resume) to this role's needs.
+  • One short line noting the resume is attached.
+  • End with a brief call to action, then a blank line, then the sign-off "Best regards," followed by EXACTLY this signature block on its own lines — do not alter it, do not invent any other contact details:
+${sig||'(candidate name)'}
+- Use only real facts found in the resume below. Do not fabricate companies, dates, or metrics.
+
 Resume:
 """${state.resumeText.slice(0,9000)}"""`;
-  let letter=(await callClaude([{role:'user',content:prompt}])).trim();
+}
+async function generateEmailDraft(j){
+  const d=await callJSON(buildEmailPrompt(j));
+  let body=(d.body||'').trim();
+  const sig=buildSignature();
   // Safety net: guarantee phone/LinkedIn are present even if the model trimmed them.
-  if(sig){ const need=[state.contact.phone,state.contact.linkedin].filter(Boolean); if(need.some(x=>!letter.includes(x))){ letter=letter.replace(/\s*$/,'')+'\n\n'+sig; } }
-  return letter;
+  if(sig){ const need=[state.contact.phone,state.contact.linkedin].filter(Boolean); if(need.some(x=>!body.includes(x))){ body=body.replace(/\s*$/,'')+'\n\n'+sig; } }
+  return {
+    to:(j.applyEmail||'').trim(),
+    subject:(d.subject||`Application for ${j.role} – ${state.candidateName||''}`).trim(),
+    body,
+  };
+}
+
+let draftIdx=null;
+async function openEmailDraft(i){
+  if(!state.resumeText){toast('Upload a resume first');return;}
+  draftIdx=i;
+  const j=state.jobs[i];
+  $('draftTitle').textContent=`${j.role||'Application'}${j.company?' at '+j.company:''}`;
+  $('draftSub').textContent=[j.location,j.companyType].filter(Boolean).join(' — ');
+  $('draftModal').classList.add('show');
+  await loadMailState();
+  renderDraftMailState();
+  if(state.drafts[i]){ setDraftLoading(false); fillDraftFields(state.drafts[i]); return; }
+  setDraftLoading(true);
+  try{
+    const d=await generateEmailDraft(j);
+    state.drafts[i]=d;
+    setDraftLoading(false);
+    fillDraftFields(d);
+  }catch(err){
+    setDraftLoading(false);
+    toast('Could not write the email: '+(err.message||err));
+    closeModal('draftModal');
+  }
+}
+function renderDraftMailState(){
+  const m=state.mail||{},box=$('draftMailState');
+  box.innerHTML=m.configured
+    ?`<div class="dot" style="background:var(--green)"></div><span>Sending from <b>${esc(m.fromEmail||m.user)}</b></span><button class="ghost" onclick="openMail()">Change</button>`
+    :`<div class="dot" style="background:var(--amber)"></div><span>Email sending isn't set up yet</span><button class="ghost" onclick="openMail()">Set up</button>`;
+}
+function setDraftLoading(on){
+  $('draftLoading').style.display=on?'block':'none';
+  $('draftFields').style.display=on?'none':'block';
+}
+function fillDraftFields(d){
+  $('draftTo').value=d.to||'';
+  $('draftSubject').value=d.subject||'';
+  $('draftMessage').value=d.body||'';
+  $('draftWarn').innerHTML=d.to?'':'<div class="warnbox">This role didn\'t come with a verified application email. Find the real address (use the “Careers ↗” link on the card), then paste it in before sending.</div>';
+  $('draftAttachName').textContent=state.resumeFile?state.resumeFile.name:'No resume attached';
+  const btn=$('draftSendBtn');btn.disabled=false;btn.textContent='Send';btn.classList.remove('confirm');
+}
+['draftTo','draftSubject','draftMessage'].forEach(id=>{
+  $(id).addEventListener('input',()=>{
+    if(draftIdx==null)return;
+    const d=state.drafts[draftIdx];if(!d)return;
+    d[id==='draftTo'?'to':id==='draftSubject'?'subject':'body']=$(id).value;
+  });
+});
+async function regenDraft(){
+  if(draftIdx==null)return;
+  const i=draftIdx;
+  delete state.drafts[i];
+  setDraftLoading(true);
+  try{
+    const d=await generateEmailDraft(state.jobs[i]);
+    state.drafts[i]=d;
+    setDraftLoading(false);
+    fillDraftFields(d);
+  }catch(err){
+    setDraftLoading(false);
+    toast('Could not rewrite the email: '+(err.message||err));
+  }
+}
+function sendDraftClick(){
+  const btn=$('draftSendBtn');
+  if(btn.classList.contains('confirm')){clearTimeout(btn._t);sendDraftEmail();return;}
+  const problem=validateDraft($('draftTo').value.trim(),$('draftSubject').value.trim(),$('draftMessage').value);
+  if(problem){toast(problem);if(!state.mail.configured)openMail();return;}
+  btn.classList.add('confirm');btn.textContent='Confirm send';
+  btn._t=setTimeout(()=>{btn.classList.remove('confirm');btn.textContent='Send';},4000);
+}
+async function sendDraftEmail(){
+  const i=draftIdx;
+  const to=$('draftTo').value.trim(),subject=$('draftSubject').value.trim(),body=$('draftMessage').value;
+  const btn=$('draftSendBtn');
+  btn.disabled=true;btn.classList.remove('confirm');btn.textContent='Sending…';
+  try{
+    await post('/api/send-email',{
+      to,subject,body,
+      attachment: state.resumeFile?{filename:state.resumeFile.name,contentType:state.resumeFile.type,data:state.resumeFile.data}:undefined,
+    });
+    state.drafts[i]={to,subject,body};
+    toast('Sent to '+to+' ✓');
+    closeModal('draftModal');
+  }catch(err){
+    toast('Not sent: '+(err.message||err));
+    btn.disabled=false;btn.textContent='Send';
+  }
+}
+const EMAIL_RE=/^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
+function validateDraft(to,subject,body){
+  if(!state.mail.configured)return 'Set up email sending first (✉ Email)';
+  const addrs=to.split(/[,;\s]+/).filter(Boolean);
+  if(!addrs.length)return 'Add a recipient email address';
+  const bad=addrs.find(a=>!EMAIL_RE.test(a));
+  if(bad)return `"${bad}" is not a valid email address`;
+  if(!subject.trim())return 'Add a subject line';
+  if(body.trim().length<50)return 'The message is too short';
+  return '';
+}
+
+/* ---------- bridge POST helper + SMTP mail setup ---------- */
+async function post(path,body){
+  let res;
+  try{ res=await fetch(BRIDGE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }
+  catch{ throw new Error('Cannot reach the local bridge. Start it with start.cmd (or node bridge.js).'); }
+  let j={}; try{ j=await res.json(); }catch{}
+  if(!res.ok) throw new Error(j.error||('Bridge error '+res.status));
+  return j;
+}
+async function loadMailState(){
+  try{
+    const r=await fetch(BRIDGE+'/api/mail-config');
+    state.mail=await r.json();
+    if(!r.ok)throw new Error(state.mail.error);
+  }catch(e){state.mail={configured:false,error:e.message};}
+}
+function openMail(){
+  const m=state.mail||{};
+  $('mHost').value=m.host||'';$('mPort').value=m.port||587;$('mUser').value=m.user||'';
+  $('mPass').value='';$('mFromName').value=m.fromName||state.candidateName||'';$('mBcc').checked=!!m.bccSelf;
+  $('mPassHint').textContent=m.hasPassword?'A password is saved. Leave blank to keep it.':'';
+  $('mailModal').classList.add('show');
+}
+function preset(host,port){$('mHost').value=host;$('mPort').value=port;}
+async function saveMail(silent){
+  try{
+    await post('/api/mail-config',{host:$('mHost').value,port:$('mPort').value,user:$('mUser').value,pass:$('mPass').value,fromName:$('mFromName').value,bccSelf:$('mBcc').checked});
+    await loadMailState();
+    renderDraftMailState();
+    if(!silent){closeModal('mailModal');toast('Email settings saved');}
+    return true;
+  }catch(e){toast(e.message);return false;}
+}
+async function testMail(){
+  const b=$('mTest');b.disabled=true;b.textContent='Testing…';
+  try{
+    if(await saveMail(true)){
+      await post('/api/mail-test',{});
+      $('mPass').value='';$('mPassHint').textContent='A password is saved. Leave blank to keep it.';
+      toast('Connected — you can send applications');
+    }
+  }catch(e){toast('Connection failed: '+e.message);}
+  b.disabled=false;b.textContent='Save and test';
+}
+
+/* ---------- fix my resume: rewrite -> review -> PDF ---------- */
+function buildResumeFixPrompt(){
+  const a=state.lastAnalysis||{};
+  const improvements=(state.resumeImprovements||[]).map(it=>`- [${(it.priority||'').toUpperCase()}] ${it.title}: ${it.detail}`).join('\n')||'(none specific — improve general ATS readiness)';
+  const quickFixes=(a.ats&&a.ats.quickFixes||[]).map(f=>'- '+f).join('\n');
+  const gaps=(a.gaps||[]).join(', ');
+  return `You are an expert resume writer and ATS optimization specialist for the ${state.country||'global'} hiring market. Rewrite the candidate's resume below to fix the issues listed, while preserving every true fact — never invent employers, titles, dates, degrees, numbers or skills that are not already in the original resume.
+
+IMPROVEMENTS TO APPLY:
+${improvements}
+${quickFixes?`\nATS QUICK FIXES TO APPLY:\n${quickFixes}`:''}
+${gaps?`\nMARKET GAPS TO ADDRESS ONLY IF SUPPORTED BY REAL EXPERIENCE BELOW (never fabricate): ${gaps}`:''}
+
+Rules:
+- Plain text, ATS-friendly: clear section headers in CAPS on their own line (SUMMARY, EXPERIENCE, EDUCATION, SKILLS, etc.), no tables, columns, icons or graphics.
+- Strengthen bullets with strong action verbs; quantify impact ONLY with numbers already present or directly derivable from the original resume.
+- Fix the keyword alignment, formatting and section-structure issues named above.
+- Preserve the candidate's real employment history, job titles, dates and education exactly as given.
+- Keep roughly the same length as the original.
+
+Reply with ONLY this JSON object (no markdown, no commentary): {"resume":"...","changes":["short bullet describing one concrete improvement made","..."]}
+Use \\n for line breaks inside the JSON "resume" string. Include 4-8 items in "changes".
+
+ORIGINAL RESUME:
+"""${state.resumeText.slice(0,12000)}"""`;
+}
+async function openResumeFix(){
+  if(!state.resumeText){toast('Upload a resume first');return;}
+  document.getElementById('resumeModal').classList.add('show');
+  await runResumeFix();
+}
+async function regenResumeFix(){ await runResumeFix(); }
+async function runResumeFix(){
+  setResumeFixLoading(true);
+  try{
+    const d=await callJSON(buildResumeFixPrompt());
+    state._resumeFixChanges=d.changes||[];
+    document.getElementById('resumeEditText').value=(d.resume||'').trim()||state.resumeText;
+    renderResumeChanges();
+  }catch(err){
+    toast('Could not rewrite the resume: '+(err.message||err));
+    closeModal('resumeModal');
+  }
+  setResumeFixLoading(false);
+}
+function renderResumeChanges(){
+  const list=state._resumeFixChanges||[];
+  document.getElementById('resumeChanges').innerHTML=list.length
+    ?'<div class="infobox"><b>What changed:</b><ul style="margin:6px 0 0 18px">'+list.map(c=>`<li>${esc(c)}</li>`).join('')+'</ul></div>'
+    :'';
+}
+function setResumeFixLoading(on){
+  document.getElementById('resumeFixLoading').style.display=on?'block':'none';
+  document.getElementById('resumeFixFields').style.display=on?'none':'block';
+}
+function confirmResumeFix(){
+  const text=document.getElementById('resumeEditText').value.trim();
+  if(text.length<80){toast('The resume text looks too short');return;}
+  state.resumeText=text;
+  const base64=buildResumePDF(text,state.candidateName);
+  const fname=(state.candidateName?state.candidateName.replace(/[^\w -]/g,'').trim().replace(/\s+/g,'_'):'Resume')+'_Updated.pdf';
+  state.resumeFile={name:fname,type:'application/pdf',data:base64};
+  downloadBase64(base64,fname,'application/pdf');
+  document.getElementById('fname').textContent=fname;
+  document.getElementById('fchars').textContent=text.length.toLocaleString()+' characters · AI-improved resume';
+  document.getElementById('resumeDownloadBtn').style.display='inline-block';
+  closeModal('resumeModal');
+  toast('Updated resume downloaded — it will be used for new application emails ✓');
+}
+// Simple, ATS-friendly PDF: CAPS lines rendered as bold section headers, everything else as body text.
+function buildResumePDF(text,name){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'letter'});
+  const margin=54, pageWidth=612, pageHeight=792, maxWidth=pageWidth-margin*2, lineHeight=14;
+  let y=margin;
+  if(name){
+    doc.setFont('Helvetica','bold');doc.setFontSize(16);
+    doc.text(name,margin,y);y+=22;
+  }
+  doc.setFont('Helvetica','normal');doc.setFontSize(10.5);
+  text.split('\n').forEach(line=>{
+    const t=line.trim();
+    if(!t){y+=lineHeight*0.6;return;}
+    const isHeader=t===t.toUpperCase()&&/[A-Z]/.test(t)&&t.length<40;
+    doc.setFont('Helvetica',isHeader?'bold':'normal');
+    doc.setFontSize(isHeader?11.5:10.5);
+    doc.splitTextToSize(line,maxWidth).forEach(w=>{
+      if(y>pageHeight-margin){doc.addPage();y=margin;}
+      doc.text(w,margin,y);y+=lineHeight;
+    });
+    if(isHeader)y+=2;
+  });
+  return doc.output('datauristring').split(',')[1];
+}
+function downloadBase64(b64,filename,mime){
+  const bin=atob(b64);const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  const blob=new Blob([arr],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+function redownloadResume(){
+  if(!state.resumeFile){toast('No resume file available');return;}
+  downloadBase64(state.resumeFile.data,state.resumeFile.name,state.resumeFile.type);
 }
 
 /* ---------- ui helpers ---------- */
