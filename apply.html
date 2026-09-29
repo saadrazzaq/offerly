@@ -156,7 +156,7 @@
     <div style="display:flex;align-items:center;gap:10px">
       <span class="tag" id="bridgeStatus" style="display:none">●</span>
       <button class="ghost" onclick="openMail()">✉ Email setup</button>
-      <button class="ghost" onclick="openSettings()">⚙ Model</button>
+      <button class="ghost" onclick="openSettings()">⚙ Engine</button>
     </div>
   </div>
 </header>
@@ -226,25 +226,26 @@
   </section>
 
   <footer>
-    Letters are written by your local Claude Code subscription. Emails are sent from your own account through the local bridge.<br/>
+    Letters are written by the AI engine you pick in ⚙. Emails are sent from your own account.<br/>
     Nothing is sent until you press Send on a draft.
   </footer>
 </div>
 
-<!-- Model modal -->
+<!-- Engine modal -->
 <div class="modal" id="settings">
   <div class="mbox">
-    <h3>Model</h3>
-    <p class="sub">Runs through your local bridge and your Claude Code subscription.</p>
+    <h3>AI engine</h3>
+    <p class="sub">Offerly runs on whichever AI agent you already have — Claude Code, Gemini CLI, OpenAI Codex, Cursor, a local Ollama model, or your own API key.</p>
+    <div class="field">
+      <label class="lab" for="engine">Engine</label>
+      <select id="engine"></select>
+      <p class="hint" id="engineNote"></p>
+    </div>
     <div class="field">
       <label class="lab" for="model">Model</label>
-      <select id="model">
-        <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced (recommended)</option>
-        <option value="claude-opus-4-8">Claude Opus 4.8 — deepest analysis</option>
-        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>
-      </select>
+      <select id="model"></select>
     </div>
-    <p class="hint" id="bridgeNote" style="margin-bottom:14px">Checking bridge connection…</p>
+    <p class="hint" id="bridgeNote" style="margin-bottom:14px">Checking connection…</p>
     <button class="cta" style="width:100%" onclick="saveSettings()">Save</button>
   </div>
 </div>
@@ -282,35 +283,90 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const BRIDGE=(location.protocol==='http:'?location.origin:'http://localhost:8787');
+/* Where the AI runs. A deployment that carries its own API key answers /health itself;
+   otherwise the prompt is sent to a bridge running on your own machine. */
+const LOCAL_BRIDGE='http://localhost:8787';
+const SELF=(location.protocol==='http:'||location.protocol==='https:')?location.origin:'';
+let BRIDGE=SELF||LOCAL_BRIDGE;
+let REMOTE=false;   // true when this page has to reach a bridge on your machine
+let ENGINES=[];
+if(!SELF)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=LOCAL_BRIDGE+a.getAttribute('href'));
 const MAX_SHOTS=5, CONCURRENCY=2;
 const state={resume:null,jobs:[],mail:{configured:false},focusId:null};
 let seq=0;
 const $=id=>document.getElementById(id);
 
 /* ---------- init ---------- */
-$('model').value=localStorage.getItem('model')||'claude-sonnet-4-6';
 ['cName','cPhone','cLinkedin','cNotes'].forEach(id=>{
   $(id).value=localStorage.getItem('apply.'+id)||'';
   $(id).addEventListener('input',()=>localStorage.setItem('apply.'+id,$(id).value));
 });
 
+async function probe(base){
+  try{const r=await fetch(base+'/health',{cache:'no-store'});return r.ok?await r.json():null;}catch{return null;}
+}
 async function checkBridge(){
   const dot=$('bridgeStatus'),note=$('bridgeNote');
   dot.style.display='inline-block';
-  try{
-    const j=await (await fetch(BRIDGE+'/health')).json();
-    dot.style.color=j.ok?'var(--green)':'var(--amber)';
-    note.textContent=j.ok?'🟢 Bridge connected — using your Claude Code subscription.':'🟡 Bridge running but the Claude binary was not found.';
-  }catch{
+  /* Prefer this site's own backend; fall back to a bridge on the user's machine. */
+  let j=SELF?await probe(SELF):null;
+  if(j&&j.ok){BRIDGE=SELF;REMOTE=false;}
+  else{
+    const local=await probe(LOCAL_BRIDGE);
+    if(local){BRIDGE=LOCAL_BRIDGE;REMOTE=!!(SELF&&SELF!==LOCAL_BRIDGE);j=local;}
+  }
+  if(j)renderEngines(j.engines,j.defaultEngine);
+  if(j&&j.ok){
+    const e=(j.engines||[]).find(x=>x.id===(localStorage.getItem('engine')||j.defaultEngine))||{};
+    dot.style.color='var(--green)';
+    note.textContent='🟢 Connected — running on '+(e.label||'your AI agent')+(REMOTE?' on your machine':'')+'.';
+  }else if(j){
+    dot.style.color='var(--amber)';
+    note.textContent='🟡 Connected, but no AI agent is set up yet. Pick one above to see how to enable it, then reload.';
+    showErr('No AI agent is available yet. Open ⚙ Engine to see what Offerly can run on and how to enable it.');
+  }else{
     dot.style.color='var(--red)';
-    note.textContent='🔴 Bridge offline. Run start.cmd (or node bridge.js) and open '+BRIDGE+'/apply';
-    showErr('The local bridge is not running. Start it with start.cmd (or node bridge.js), then open '+BRIDGE+'/apply');
+    note.textContent='🔴 No AI backend reachable. Run start.cmd (or node bridge.js) and reload.';
+    showErr('No AI backend is reachable. Start the local bridge with start.cmd (or node bridge.js), then reload — or deploy with an API key set.');
   }
 }
 
+/* The ⚙ picker is built from whatever the backend reports, so an agent you install
+   later shows up on the next reload without a code change. The model choice is kept
+   per engine — a Claude model must not leak into a Gemini run. */
+function renderEngines(list,def){
+  ENGINES=list||[];
+  const sel=$('engine');
+  if(!sel||!ENGINES.length)return;
+  const saved=localStorage.getItem('engine');
+  sel.innerHTML='';
+  ENGINES.forEach(e=>{
+    const o=document.createElement('option');
+    o.value=e.id;o.textContent=e.label+(e.available?'':' — not set up');o.disabled=!e.available;
+    sel.appendChild(o);
+  });
+  const pick=(saved&&ENGINES.some(e=>e.id===saved&&e.available))?saved:def;
+  if(pick)sel.value=pick;
+  sel.onchange=()=>renderModels(sel.value);
+  renderModels(sel.value);
+}
+function renderModels(id){
+  const e=ENGINES.find(x=>x.id===id),note=$('engineNote'),sel=$('model');
+  if(note)note.textContent=e?(e.available?e.note:e.install):'';
+  if(!sel||!e)return;
+  sel.innerHTML='';
+  e.models.forEach(m=>{const o=document.createElement('option');o.value=m.value;o.textContent=m.label;sel.appendChild(o);});
+  const saved=localStorage.getItem('model.'+id);
+  if(saved!==null&&e.models.some(m=>m.value===saved))sel.value=saved;
+}
+
+
 function openSettings(){$('settings').classList.add('show');}
-function saveSettings(){localStorage.setItem('model',$('model').value);closeModal('settings');toast('Model saved');}
+function saveSettings(){
+  const e=$('engine').value;
+  if(e){localStorage.setItem('engine',e);localStorage.setItem('model.'+e,$('model').value);}
+  closeModal('settings');toast('Saved');checkBridge();
+}
 function closeModal(id){$(id).classList.remove('show');}
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));});
@@ -320,13 +376,16 @@ async function post(path,body){
   let res;
   try{
     res=await fetch(BRIDGE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-  }catch{throw new Error('Cannot reach the local bridge. Start it with start.cmd (or node bridge.js).');}
+  }catch{throw new Error(REMOTE
+    ? 'Cannot reach your local bridge at '+BRIDGE+'. This site has no API key of its own, so it runs the AI on your machine — start the bridge with start.cmd (or node bridge.js), then reload.'
+    : 'Cannot reach the AI backend. Start the local bridge with start.cmd (or node bridge.js).');}
   let j={};try{j=await res.json();}catch{}
   if(!res.ok)throw new Error(j.error||('Bridge error '+res.status));
   return j;
 }
 async function callClaude(prompt,images){
-  const j=await post('/api',{prompt,images,model:localStorage.getItem('model')||'claude-sonnet-4-6'});
+  const engine=localStorage.getItem('engine')||'';
+  const j=await post('/api',{prompt,images,engine,model:localStorage.getItem('model.'+engine)||''});
   return j.text||'';
 }
 async function callJSON(prompt,images){

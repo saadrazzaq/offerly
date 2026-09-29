@@ -5,6 +5,9 @@ offerly.log
 # Node
 node_modules/
 
+# Vercel CLI
+.vercel
+
 # OS / editor / tooling
 .DS_Store
 Thumbs.db
