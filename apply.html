@@ -680,6 +680,47 @@ async function callJSON(prompt,images){
   }
   throw new Error('Could not read the model reply. It starts with: "'+last.slice(0,90).replace(/\n/g,' ')+'"');
 }
+/* A reply is usually valid JSON. When it is not, it is nearly always one of four
+   things, and each can be repaired without guessing at meaning:
+     a raw newline or tab inside a string   (JSON forbids control characters there)
+     a quote inside a string the model did not escape
+     a reply cut off mid-value
+     a reply cut off mid-key, which leaves a key with nothing after it
+   Anything else is left to fail honestly rather than be mangled into something
+   that parses but is wrong. */
+function salvageJSON(t){
+  let out='',inStr=false,esc=false;
+  const stack=[];
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(inStr){
+      if(esc){out+=ch;esc=false;continue;}
+      if(ch==='\\'){out+=ch;esc=true;continue;}
+      if(ch==='"'){
+        /* A quote only ends the string if what follows it could follow a string.
+           Otherwise the model left a quote inside the text. */
+        if(i===t.length-1||/^\s*[,:}\]]/.test(t.slice(i+1,i+40))){inStr=false;out+=ch;}
+        else out+='\\"';
+        continue;
+      }
+      const code=ch.charCodeAt(0);
+      if(code<0x20){out+=(ch==='\n'?'\\n':ch==='\r'?'\\r':ch==='\t'?'\\t':' ');continue;}
+      out+=ch;continue;
+    }
+    if(ch==='"'){inStr=true;out+=ch;continue;}
+    if(ch==='{'||ch==='[')stack.push(ch);
+    else if(ch==='}'||ch===']')stack.pop();
+    out+=ch;
+  }
+  if(inStr)out+='"';
+  /* Drop whatever the cut-off left dangling: a key with no value, or a stray comma. */
+  out=out.replace(/,\s*"[^"]*"\s*:\s*$/,'')
+         .replace(/,\s*"[^"]*"\s*$/,'')
+         .replace(/([{[])\s*"[^"]*"\s*:?\s*$/,'$1')
+         .replace(/,\s*$/,'');
+  while(stack.length){const o=stack.pop();out+=(o==='{'?'}':']');}
+  return out;
+}
 function repairJSON(t){
   let inStr=false,esc=false;const stack=[];
   for(let i=0;i<t.length;i++){const ch=t[i];
@@ -700,7 +741,9 @@ function extractJSON(s){
     else if(ch==='"')inStr=true;else if(ch==='{')depth++;
     else if(ch==='}'){if(--depth===0){end=i;break;}}
   }
-  const cands=[];if(end>=0)cands.push(t.slice(0,end+1));cands.push(repairJSON(t));
+  const cands=[];
+  if(end>=0){cands.push(t.slice(0,end+1));cands.push(salvageJSON(t.slice(0,end+1)));}
+  cands.push(repairJSON(t));cands.push(salvageJSON(t));
   for(const c of cands){try{return JSON.parse(c.replace(/,\s*([}\]])/g,'$1'));}catch(_){}}
   throw new Error('malformed json');
 }
