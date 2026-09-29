@@ -292,6 +292,10 @@ async function handle(req, res) {
       hosted: engines.SERVERLESS,
       version: VERSION,
       canSave: !engines.SERVERLESS, // a serverless deployment has no writable disk
+      // /health answers any page, but the routes that do the work only answer the
+      // ones allowed in. Say which this is, so a page elsewhere does not show a
+      // green light for a bridge that will then refuse it.
+      originAllowed: trustedOrigin(req),
     });
   }
 

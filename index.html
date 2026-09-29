@@ -507,12 +507,30 @@ async function checkBridge(){
     +(HOSTED_BACKEND?' · hosted':' · local bridge')+' · '+(j.engines||[]).length+' engines';
   renderEngines(j.engines,j.suggested||j.defaultEngine,j.canSave);
 
+  /* The bridge answered /health, which any page may ask. Whether it will run
+     anything for this page is a separate question, and the answer decides the colour. */
+  if(REMOTE&&j.originAllowed!==true){
+    dot.style.color='var(--red)';dot.title='Bridge refuses this site';
+    const fix='Close the Offerly window on your computer and start it again with <b>start.cmd</b>'
+      +' — or run <code>OFFERLY_ALLOWED_ORIGINS='+escapeHTMLish(SELF)+' node bridge.js</code>.';
+    setNote('🔴 Offerly is running on your computer, but it does not allow <b>'+escapeHTMLish(SELF)+'</b> to use it. '+fix);
+    showErr('Offerly on your computer does not allow this site yet. Restart it with start.cmd, then reload this page.');
+    return;
+  }
+
   const e=engineInfo();
-  if(engineUsable(e)){
+  if(engineUsable(e)&&testedOK(e.id)){
     dot.style.color='var(--green)';dot.title='Connected';
-    setNote('🟢 Connected — running on <b>'+e.label+'</b>'
-      +(REMOTE?' on your machine':'')
+    setNote('🟢 Connected — <b>'+e.label+'</b> answered a test'
+      +(REMOTE?', running on your computer':'')
       +(!e.available&&localCreds(e.id)?', with the key stored in this browser':'')+'.');
+    showErr('');
+  }else if(engineUsable(e)){
+    /* Settings being present is not the same as a model answering: a saved address
+       can point at nothing, or at something that is not a model. */
+    dot.style.color='var(--amber)';dot.title='Not tested';
+    setNote('🟡 <b>'+e.label+'</b> is set up'+(REMOTE?' on your computer':'')
+      +' but has not answered a test yet. Open ⚙ Engine and press <b>Connect</b>.');
     showErr('');
   }else{
     dot.style.color='var(--amber)';dot.title='Not connected';
@@ -636,7 +654,8 @@ function setConnectState(e){
   const s=$('engineStatus');
   if(!s)return;
   if(!e){s.textContent='';return;}
-  if(e.available)s.innerHTML='🟢 Connected.';
+  if(e.available&&testedOK(e.id))s.innerHTML='🟢 Connected — answered a test.';
+  else if(e.available)s.innerHTML='🟡 Set up, not tested yet. Press Connect to check that a model answers.';
   else if(localCreds(e.id))s.innerHTML='🔵 Using a key kept in this browser. Press Connect to check it.';
   else if(e.blocked)s.innerHTML='⚪ '+e.blocked;
   else if(e.missing&&e.missing.length)s.innerHTML='⚪ Needs '+listJoin(e.missing)+'.';
@@ -656,6 +675,7 @@ async function connectEngine(){
   try{
     const j=await post('/api/engine-connect',{engine:id,model:$('model').value,values,remember:!keepLocal});
     if(j.ok===false){
+      setTested(id,false);
       /* Installed but signed out is the common case, and the CLI's own wording does
          not help anyone looking at a web page. */
       if(j.kind==='auth'&&e.login){
@@ -675,11 +695,13 @@ async function connectEngine(){
       const i=ENGINES.findIndex(x=>x.id===id);
       if(i>=0)ENGINES[i]=j.engineInfo;
     }
+    setTested(id,true);
     status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.';
     e.available=true;
     toast('Connected to '+e.label);
     checkBridge();
   }catch(err){
+    setTested(id,false);
     status.innerHTML='🔴 '+escapeHTMLish(err.message);
   }finally{
     btn.disabled=false;btn.textContent=was;
@@ -688,6 +710,7 @@ async function connectEngine(){
 async function forgetEngine(){
   const id=$('engine').value;
   setLocalCreds(id,null);
+  setTested(id,false);
   try{const info=await post('/api/engine-forget',{engine:id});
     const i=ENGINES.findIndex(x=>x.id===id);if(i>=0)ENGINES[i]=info;
   }catch(e){/* nothing stored server-side is fine */}
@@ -698,6 +721,11 @@ async function forgetEngine(){
 /* A hosted deployment stores nothing: what makes an engine usable there is a key
    held in this browser. Readiness has to account for both. */
 let HOSTED_BACKEND=false;
+/* "Connected" is only said after a real round trip, remembered per engine and per
+   backend: passing a test on one bridge says nothing about another. */
+function testKey(id){return 'tested.'+id+'@'+BRIDGE;}
+function testedOK(id){try{return !!localStorage.getItem(testKey(id));}catch{return false;}}
+function setTested(id,ok){try{ok?localStorage.setItem(testKey(id),String(Date.now())):localStorage.removeItem(testKey(id));}catch{}}
 function engineUsable(e){return !!e&&(e.available||!!localCreds(e.id));}
 function browserCanDrive(j){
   return (j.engines||[]).some(e=>e.kind==='api'&&!e.blocked&&localCreds(e.id));
