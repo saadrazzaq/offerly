@@ -1792,10 +1792,15 @@ function validateDraft(to,subject,body){
 function localMail(){try{return JSON.parse(localStorage.getItem('mail.local')||'null');}catch{return null;}}
 function setLocalMail(v){try{v?localStorage.setItem('mail.local',JSON.stringify(v)):localStorage.removeItem('mail.local');}catch{}}
 
+/* The live job search needs no key and no agent, so a hosted copy always runs it
+   itself. Sending it to a bridge on the visitor's machine made it fail whenever that
+   bridge was not running or did not list this site in OFFERLY_ALLOWED_ORIGINS. */
+const SELF_ROUTES=new Set(['/api/jobs']);
 async function post(path,body){
+  const base=SELF&&SELF_ROUTES.has(path)?SELF:BRIDGE;
   let res;
-  try{ res=await fetch(BRIDGE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }
-  catch{ throw new Error('Cannot reach the local bridge. Start it with start.cmd (or node bridge.js).'); }
+  try{ res=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }
+  catch{ throw new Error('Cannot reach the Offerly bridge at '+base+'. If it is not running, start it with start.cmd (or node bridge.js). If it is, open Offerly from '+LOCAL_BRIDGE+'/ — a page opened from anywhere else is only allowed in when its address is listed in OFFERLY_ALLOWED_ORIGINS.'); }
   let j={}; try{ j=await res.json(); }catch{}
   if(!res.ok) throw new Error(j.error||('Bridge error '+res.status));
   return j;

@@ -255,7 +255,11 @@ async function handle(req, res) {
   // CORS — allow the page to call this bridge whether it's opened locally (file://,
   // http://localhost) or from a hosted HTTPS origin (e.g. the Vercel deployment).
   const origin = req.headers.origin;
-  const allowOrigin = PROTECTED.has(url) ? (origin && trustedOrigin(req) ? origin : `http://localhost:${PORT}`) : '*';
+  // A protected route still names the caller's origin: an untrusted page then gets
+  // the 403 below as something it can read, instead of the browser reporting a
+  // failed connection and the page telling the person the bridge is not running.
+  // The 403 carries no data, so letting the page read it gives nothing away.
+  const allowOrigin = PROTECTED.has(url) ? (origin || `http://localhost:${PORT}`) : '*';
   res.setHeader('Access-Control-Allow-Origin', allowOrigin);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
