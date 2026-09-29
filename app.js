@@ -364,16 +364,17 @@ async function handle(req, res) {
     if (req.method === 'POST' && url === '/api/jobs') {
       const b = await readJSON(req, 1e5);
       const out = await jobfeeds.search({
-        roles: Array.isArray(b.roles) ? b.roles.slice(0, 8) : [],
+        roles: Array.isArray(b.roles) ? b.roles.slice(0, 12) : [],
         companies: Array.isArray(b.companies) ? b.companies.slice(0, 20) : [],
         country: String(b.country || ''),
         workSetup: ['remote', 'hybrid', 'onsite'].includes(b.workSetup) ? b.workSetup : '',
         days: Number.isFinite(+b.days) ? Math.max(0, Math.min(90, +b.days)) : 7,
-        limit: Math.min(80, Number(b.limit) || 60),
-        skills: Array.isArray(b.skills) ? b.skills.slice(0, 25) : [],
-        level: Number.isFinite(+b.level) ? Math.max(0, Math.min(6, +b.level)) : undefined,
+        limit: Math.min(40, Number(b.limit) || 30),
+        skills: Array.isArray(b.skills) ? b.skills.slice(0, 40) : [],
+        // +null is 0, which would read a missing level as "intern".
+        level: b.level !== null && b.level !== '' && Number.isFinite(+b.level) ? Math.max(0, Math.min(6, +b.level)) : undefined,
       });
-      console.log('  live jobs: ' + out.jobs.length + ' kept from ' + out.scanned + ' scanned');
+      console.log('  live jobs: ' + out.jobs.length + ' kept from ' + out.scanned + ' scanned, rejected ' + JSON.stringify(out.rejected));
       return sendJSON(res, 200, out);
     }
 

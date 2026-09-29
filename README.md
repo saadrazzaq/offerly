@@ -4,7 +4,8 @@ Offerly is a single-page AI job-search copilot. Upload your resume, pick a targe
 
 - **Deep resume analysis** — seniority, experience, strengths, and market-specific gaps
 - **ATS compatibility score** /100 with a six-area breakdown and quick fixes
-- **Verified live openings** — real postings pulled from public job feeds, each with the date its source published it and a link straight to that posting. Filter by **posted within** (24 hours → a month) and **work setup** (remote / hybrid / on-site), the way you would on LinkedIn.
+- **Verified live openings** — real postings pulled from public job feeds, each with the date its source published it and a link straight to that posting, checked to be that posting and still open. Filter by **posted within** (24 hours → a month), **country** and **work setup** (remote / hybrid / on-site), the way you would on LinkedIn.
+- **An editable search profile** — the positions and skills read off your resume, as tags you can remove or add to. Every live opening must match your positions, at least one skill, your seniority, country, work setup and posting window.
 - **Plus a recruiter shortlist** of real companies that hire this profile, split into **High / Medium / Stretch** with a **fit score** — every link pre-filtered to the dates and work setup you chose
 - **Channel-aware Apply** — for each role the recruiter picks the most realistic application route and the button matches it: LinkedIn Easy Apply, Indeed, Glassdoor, Bayt, NaukriGulf, GulfTalent, TASC, Hays, the company career page, or email — with a regional bias (Gulf boards for Gulf markets, LinkedIn/Indeed for global)
 - **Apply by Email** — generates a cover letter *tailored to that exact role* and opens Gmail compose pre-filled (recipient + subject + letter + your signature). Drag in your resume and send.
@@ -96,30 +97,38 @@ Two different things, kept clearly apart on the page, because they are not equal
 
 Postings from a company's own feed are marked **direct** and sort above a board's copy of the same job on the same day: it is the source, its link outlives the aggregator's, and it is the one that stays accurate. Company tokens are guessed from the name, so where the feed says whose board it is, that is checked before its jobs are trusted.
 
-A posting is only shown if it clears all of these:
+### Your search profile
 
-- **Published inside your window**, per the source's own date.
-- **The link is followed and proved to be that posting.** Not just a status code: the page is opened, any redirect is followed and stored so you are not bounced again, a landing on the board's front page or search results counts as gone, and most of the title's distinctive words have to appear on the page that answers. A link that cannot be proved is kept but labelled, never dressed up as confirmed.
-- **The old check, for contrast.** A status code is not enough: most boards answer 200 with a "this job is no longer available" page, so the page text is read too. Phrases are matched on word boundaries, because a substring test reads "Salary Undisclosed" as closed and throws away live postings. A rate limit or an outage is treated as our problem, not the posting's, so those links are kept.
-- **The title matches one of your target roles as a phrase.** Each role is matched on its own rather than pooled into a bag of words — pooling was why "Data Engineer" in your list let "Data Entry Clerk" through on the word "data". A role's identifying words must all be present, and the head word has to agree, with `engineer`/`developer`/`programmer` treated as the same thing and `full stack`/`fullstack` spelled either way.
+After the analysis, the job list opens with a **search profile** read from your resume: the **positions** you fit and the **skills** you have actually used. Remove a tag with ×, type or paste new ones (commas split them), change the country, posting window, work setup or career stage, and press **Update results**. Only the live search runs again — the analysis is not repeated, so an edit costs seconds, not minutes. Feed responses are cached for five minutes so that editing a tag does not hammer the sources; every link is still checked again on each search.
+
+Every part of the profile is a requirement. A posting is only shown if it clears **all** of these:
+
+- **Published inside your window**, by the source's own *first-published* date. Greenhouse also reports when a job was last edited; that is ignored, because a role opened two years ago and touched yesterday is not "posted in the past 24 hours". A posting with no date is dropped.
+- **Open to someone in your country.** The location is read for the countries and regions it names — "Columbus, IN" is Indiana, not India; "San Francisco, CA" is California, not Canada; "Remote – EMEA" covers Germany but not Pakistan; "USA, Canada, Mexico" does not cover Pakistan. Lever and Ashby also publish structured countries, which are used too. A remote role restricted to another country is **not** shown; one that says *worldwide* or *anywhere* is. A location that cannot be placed is dropped rather than guessed at. **Remote (Global)** shows only roles open worldwide.
+- **Your work setup.** An unstated arrangement is not a match.
+- **One of your positions**, matched as a phrase. Each position is matched on its own rather than pooled into a bag of words — pooling was why "Data Engineer" let "Data Entry Clerk" through on the word "data". A position's identifying words must all be in the title and the head word has to agree, with `engineer`/`developer`/`programmer` treated as one and `full stack`/`fullstack` spelled either way.
 - **The seniority is within one step of yours.** No internships for a senior engineer, and no engineering-director posts either.
-- **Your skills appear in the job description** where the title alone is too vague to judge. Descriptions also rank the survivors, so a posting naming your actual stack sorts above one that does not.
-- **Its stated location is in your country** and its work setup matches. Postings with no location or no stated arrangement are dropped rather than guessed at, and every link is checked before the page shows it, so a vacancy the employer has already pulled does not reach you.
+- **At least one of your skills in the job description**, in whatever spelling the ad uses (`Node.js`/`NodeJS`, `PostgreSQL`/`Postgres`, `Kubernetes`/`k8s`; "go-to-market" is not Go). Greenhouse lists carry no description, so each surviving Greenhouse posting is fetched on its own — which also proves the employer has not pulled it. Each card shows which of your skills it matched, and more matches rank higher.
+- **The link goes to that posting and it is still open.** The page is opened and any redirect followed. The posting's ID has to survive the redirect — a closed Stripe job redirects to Stripe's full list of openings, which still shows other jobs with the same title. The page must show the job's title, must not say it is closed, and its structured `validThrough` date must not have passed.
 
-**Honest limits.** Coverage is excellent for remote roles and for companies on Greenhouse, Lever or Ashby. It is thin for on-site roles in markets served mainly by regional boards — Bayt, GulfTalent and NaukriGulf publish no open API, and LinkedIn and Indeed do not allow this kind of access. When nothing is verified the page says so, tells you how many companies and postings it checked, and falls back to the shortlist.
+A few boards (Remotive, sometimes Jobicy) show a bot check to any server, so their pages cannot be opened for this. Those postings are shown only because the board's own live feed listed that exact posting moments earlier, at a URL carrying its ID on the board's own site, and the card says so in those words.
 
-**Only a link that goes to the posting says so.** A live opening's button reads *Open this posting* and lands on that exact job. A suggestion's button reads *Search LinkedIn* — because that is what it does. No button promises to apply somewhere it cannot take you; a search that says "Apply on LinkedIn" and lands on an empty results page is indistinguishable from a broken link, which is why the wording matters.
+The summary above the list says how many postings were checked and how many were left out for each reason, so a short list reads as a strict one rather than a broken one.
 
-**🔍 Suggestions** are the recruiter model's judgement about which companies hire your profile. The model is asked for *employers*, never for a specific vacancy — anything it remembers about a particular posting is as old as its training data, which is what made earlier results look stale. Each suggestion links to a search already filtered to your choices:
+**Honest limits.** Coverage is excellent for remote roles and for companies on Greenhouse, Lever or Ashby. It is thin for on-site roles in markets served mainly by regional boards — Bayt, GulfTalent and NaukriGulf publish no open API, and LinkedIn and Indeed do not allow this kind of access. When nothing matches the page says so and falls back to the shortlist.
 
-| Board | Date filter | Work setup |
-|-------|-------------|------------|
-| LinkedIn | `f_TPR` + `sortBy=DD` | `f_WT` (on-site / remote / hybrid) |
-| Indeed | `fromage` + `sort=date` | in the query |
-| Glassdoor | `fromAge` | in the query |
-| Bayt, GulfTalent, TASC, Hays | `tbs=qdr` on a site-scoped search | in the query |
+**Only a link that goes to the posting says so.** A live opening's button reads *Open this posting* and lands on that exact job. A suggestion's button reads *Search LinkedIn* — because that is what it does. No button promises to apply somewhere it cannot take you.
 
-Google only exposes day, week and month reliably, so a 3-day or 2-week filter is widened to the nearest range it supports rather than quietly dropped.
+**🔍 Suggestions** are the recruiter model's judgement about which companies hire your profile. The model is asked for *employers*, never for a specific vacancy — anything it remembers about a particular posting is as old as its training data. They are picked for one country, so if you change the country in the search profile they are hidden until you analyze again. Each suggestion links to a search already filtered to your country, dates and work setup:
+
+| Board | Country | Date filter | Work setup |
+|-------|---------|-------------|------------|
+| LinkedIn | `location` (Worldwide for Remote (Global)) | `f_TPR` + `sortBy=DD` | `f_WT` |
+| Indeed | that country's own Indeed site (`de.indeed.com`, `pk.indeed.com`, …); a site search where none exists | `fromage` + `sort=date` | in the query |
+| Glassdoor, Bayt, NaukriGulf, GulfTalent, TASC, Hays | in a site-scoped Google search | `tbs=qdr` | in the query |
+| A company's careers site | a search of the company's own domain — `/careers` is a different path on every site and guessing it 404s | `tbs=qdr` | — |
+
+Glassdoor's own search needs an internal location ID to filter by country, so a direct link would search the whole world; the site search keeps the country. Google only exposes day, week and month reliably, so a 3-day or 2-week filter is widened to the nearest range it supports rather than quietly dropped.
 
 Your **work setup** choice also reaches the resume analysis: pick Remote and the improvements cover async written communication, self-direction and time-zone overlap; pick On-site and they cover work authorisation, relocation and local presence.
 
@@ -239,6 +248,7 @@ Serverless limits worth knowing:
 | `app.js` | Every route: AI calls, job-page fetching, email — shared by the bridge and Vercel |
 | `engines.js` | Engine registry: what each agent needs, how to find it, how to call it |
 | `jobfeeds.js` | Live job feeds: the public sources, the filters, and the link check |
+| `places.js` | Reads a posting's location into the countries and regions it is open to |
 | `bridge.js` | Local server on `localhost:8787` |
 | `api/` | Vercel functions — thin wrappers around `app.js` |
 | `vercel.json` | Deployment config (routing, function limits) |

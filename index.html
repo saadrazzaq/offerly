@@ -113,6 +113,25 @@
   .chip{background:var(--card2);border:1px solid var(--line);padding:6px 11px;border-radius:8px;font-size:13px}
   .chip.good{border-color:rgba(52,211,153,.4);color:#7ff0c8}
   .chip.gap{border-color:rgba(251,113,133,.4);color:#ffb3bf}
+  /* Search profile: the tags every live opening has to match. */
+  .sp-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-bottom:14px}
+  .sp-head b{font-size:16px}
+  .sp-group{margin-bottom:14px}
+  .sp-group .lab small{text-transform:none;letter-spacing:0;font-weight:500;color:var(--mut)}
+  .tagbox{display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:8px}
+  .tagbox:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px rgba(109,139,255,.15)}
+  .tagbox .chip{display:inline-flex;align-items:center;gap:6px;background:var(--card);padding:5px 6px 5px 10px}
+  .tagbox .chip.added{border-color:rgba(109,139,255,.55)}
+  .tagbox .chip button{background:none;border:0;color:var(--mut);cursor:pointer;font-size:15px;line-height:1;padding:0 3px;border-radius:5px}
+  .tagbox .chip button:hover{color:var(--red);background:rgba(251,113,133,.12)}
+  .tagbox input[type=text]{flex:1;min-width:150px;width:auto;border:0;background:transparent;padding:6px 4px;box-shadow:none}
+  .sp-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 14px}
+  .sp-filters select{padding:9px 11px;font-size:13px}
+  @media(max-width:820px){.sp-filters{grid-template-columns:1fr 1fr}}
+  .sp-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .sp-actions .note{margin:0}
+  .matchline{font-size:12px;color:var(--mut);margin:8px 0 2px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .matchline .chip{font-size:11.5px;padding:3px 8px}
   .summary{color:var(--mut);font-size:14px}
   .statrow{display:flex;gap:22px;margin-top:6px;flex-wrap:wrap}
   .stat b{font-size:22px;display:block;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -437,7 +456,7 @@ let REMOTE=false;   // true when this page has to reach a bridge on your machine
 let ENGINES=[];
 if(!SELF)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=LOCAL_BRIDGE+a.getAttribute('href'));
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
-const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],live:[],liveMeta:null,candidateName:"",mail:{configured:false},filters:{days:7,workSetup:""}};
+const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],live:[],liveMeta:null,candidateName:"",mail:{configured:false},filters:{days:7,workSetup:"",country:""},tags:{roles:[],skills:[],added:new Set()},suggestions:[]};
 const $=id=>document.getElementById(id);
 
 /* ---------- init ---------- */
@@ -872,7 +891,7 @@ async function analyze(){
   const country=csel.value;
   const sen=document.getElementById('seniority').value;
   const workSetup=wsel.value, days=Number(dsel.value)||0;
-  state.filters={days,workSetup};
+  state.filters={days,workSetup,country};
   const R=state.resumeText;
 
   // Split into 3 parallel calls — the headless CLI is slow, so one giant call times out.
@@ -894,11 +913,25 @@ async function analyze(){
 
     const analysis=aData.analysis||aData;
     const improvements=aData.resumeImprovements||(analysis&&analysis.resumeImprovements)||[];
+    state.country=country;
+    state.seniority=sen;
+    state.suggestions=jobs;
+    state.suggestionsCountry=country;
+    state.lastAnalysis=analysis;
+    /* The tags the live search runs on: positions and skills read off the resume,
+       which the person can then edit. Only what the resume shows — strengths are
+       sentences, and matching a sentence against a job ad finds nothing. */
+    state.tags={
+      roles:cleanTags(analysis.targetRoles||[]).slice(0,8),
+      skills:cleanTags(analysis.topSkills||[]).slice(0,20),
+      added:new Set()
+    };
+    if(!state.tags.roles.length)state.tags.roles=cleanTags(jobs.map(j=>j.role||'')).slice(0,4);
     /* The model names employers; it cannot know what is open today. Ask the bridge
        for real postings from those companies' own careers feeds and the live job
        boards, and put those first. */
     setLoadingNote('Checking live job feeds for openings…');
-    const live=await findLiveJobs(analysis,jobs,country,workSetup,days);
+    const live=await findLiveJobs();
     state.live=live.jobs||[];
     state.liveMeta=live.meta||null;
     jobs=[...state.live.map(liveToJob), ...jobs];
@@ -907,11 +940,8 @@ async function analyze(){
     state.jobs=jobs;
     state.candidateName=(analysis&&analysis.candidateName)||"";
     state.contact={name:state.candidateName,email:analysis.candidateEmail||"",phone:analysis.candidatePhone||"",linkedin:analysis.candidateLinkedIn||""};
-    state.country=country;
-    state.seniority=sen;
     state.drafts={};
     state.resumeImprovements=improvements;
-    state.lastAnalysis=analysis;
     renderResults(parsed);
   }catch(err){
     showErr(err.message||String(err));
@@ -945,7 +975,7 @@ ${workSetup?`At least two of the resumeImprovements MUST be specific to landing 
 Also audit the resume against modern ATS (Workday, Greenhouse, Lever, Taleo): an overall score 0-100, plus six areas each scored 0-100 with a one-line note — "Keyword & role alignment", "Formatting & parseability", "Section structure", "Quantified impact", "Contact & links", "Skills coverage". Be a strict but fair ATS auditor.
 
 Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
-{"analysis":{"candidateName":"string or empty","candidateEmail":"from resume or empty","candidatePhone":"from resume or empty","candidateLinkedIn":"full LinkedIn URL from resume or empty","seniority":"string","yearsExperience":"e.g. '4 yrs'","summary":"2-3 sentence recruiter view","topSkills":["..."],"strengths":["3-5"],"gaps":["2-4 gaps for ${country}"],"targetRoles":["3-6 job titles EXACTLY as job boards write them, best fit first — e.g. 'Senior Backend Engineer', 'Data Engineer'. Real, searchable titles only: no company jargon, no slashes, no 'or', no seniority ranges, no invented hybrids. Include the seniority word only when it genuinely fits this candidate."],"ats":{"score":0,"verdict":"one short line","breakdown":[{"area":"Keyword & role alignment","score":0,"note":"..."},{"area":"Formatting & parseability","score":0,"note":"..."},{"area":"Section structure","score":0,"note":"..."},{"area":"Quantified impact","score":0,"note":"..."},{"area":"Contact & links","score":0,"note":"..."},{"area":"Skills coverage","score":0,"note":"..."}],"quickFixes":["3-5 specific ATS fixes"]}},"resumeImprovements":[{"priority":"high|medium|low","title":"short","detail":"specific, actionable"}]}
+{"analysis":{"candidateName":"string or empty","candidateEmail":"from resume or empty","candidatePhone":"from resume or empty","candidateLinkedIn":"full LinkedIn URL from resume or empty","seniority":"string","yearsExperience":"e.g. '4 yrs'","summary":"2-3 sentence recruiter view","topSkills":["8-15 concrete hard skills this candidate has actually used, written exactly as job ads write them — languages, frameworks, tools, platforms, methods (e.g. 'Python', 'React', 'AWS', 'Kubernetes', 'SQL', 'Figma'). Most relevant first. No soft skills, no sentences, no skills the resume does not show."],"strengths":["3-5"],"gaps":["2-4 gaps for ${country}"],"targetRoles":["3-6 job titles EXACTLY as job boards write them, best fit first — e.g. 'Senior Backend Engineer', 'Data Engineer'. Real, searchable titles only: no company jargon, no slashes, no 'or', no seniority ranges, no invented hybrids. Include the seniority word only when it genuinely fits this candidate."],"ats":{"score":0,"verdict":"one short line","breakdown":[{"area":"Keyword & role alignment","score":0,"note":"..."},{"area":"Formatting & parseability","score":0,"note":"..."},{"area":"Section structure","score":0,"note":"..."},{"area":"Quantified impact","score":0,"note":"..."},{"area":"Contact & links","score":0,"note":"..."},{"area":"Skills coverage","score":0,"note":"..."}],"quickFixes":["3-5 specific ATS fixes"]}},"resumeImprovements":[{"priority":"high|medium|low","title":"short","detail":"specific, actionable"}]}
 
 Resume:
 """${resume.slice(0,12000)}"""`;
@@ -1011,15 +1041,30 @@ function candidateLevel(analysis){
   if(/senior/.test(t))return 3;
   return 2;
 }
-async function findLiveJobs(analysis,jobs,country,workSetup,days){
-  const roles=[...new Set([...(analysis.targetRoles||[]),...jobs.map(j=>j.role||'')])].filter(Boolean).slice(0,8);
-  const companies=[...new Set(jobs.map(j=>j.company||'').filter(Boolean))].slice(0,20);
-  const skills=[...new Set([...(analysis.topSkills||[]),...(analysis.strengths||[])])].filter(Boolean).slice(0,25);
-  if(!roles.length)return {jobs:[],meta:null};
+/* Tags are compared case-insensitively, so "react" and "React" are one tag. */
+function cleanTags(list){
+  const seen=new Set(),out=[];
+  for(const raw of list){
+    const t=String(raw||'').replace(/\s+/g,' ').trim().slice(0,60);
+    const k=t.toLowerCase();
+    if(!t||seen.has(k))continue;
+    seen.add(k);out.push(t);
+  }
+  return out;
+}
+/* The live search runs on the tags and on the filters as they are set right now.
+   Every one of them is a requirement on the server: the posting date, the country,
+   the work setup, the position, the seniority and at least one skill. */
+async function findLiveJobs(){
+  const {roles,skills}=state.tags;
+  const {country,days,workSetup}=state.filters;
+  const companies=state.suggestionsCountry===country
+    ? [...new Set((state.suggestions||[]).map(j=>j.company||'').filter(Boolean))].slice(0,20) : [];
+  if(!roles.length)return {jobs:[],meta:{error:'Add at least one position to search for.'}};
   try{
-    const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:60,
-      skills,level:candidateLevel(analysis)});
-    return {jobs:r.jobs||[],meta:{sources:r.sources||[],checked:r.checked||0,scanned:r.scanned||0}};
+    const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:30,
+      skills,level:candidateLevel(state.lastAnalysis||{})});
+    return {jobs:r.jobs||[],meta:{sources:r.sources||[],checked:r.checked||0,scanned:r.scanned||0,rejected:r.rejected||{},matched:r.matched||0}};
   }catch(e){
     return {jobs:[],meta:{error:e.message}};
   }
@@ -1031,7 +1076,7 @@ function liveToJob(p){
     category:'live',fitScore:0,careerDomain:'',applyMethod:'live',applyEmail:'',
     matchReasons:[],missingForRole:[],pitch:'',
     _live:true,_url:p.url,_postedAt:p.postedAt,_source:p.sourceLabel||p.source,_workplace:p.workplace||'',
-    _linkState:p.linkState||'',_direct:!!p.direct};
+    _linkState:p.linkState||'',_direct:!!p.direct,_skills:p.matchedSkills||[]};
 }
 function timeAgo(iso){
   const t=Date.parse(iso); if(!t)return '';
@@ -1178,8 +1223,6 @@ function renderResults(d){
     <p class="summary">${esc(a.summary||'')}</p>
   </div>
   <div class="analysis-grid">
-    <div class="mini"><h4>🎯 Roles to target</h4><div class="chips">${(a.targetRoles||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div></div>
-    <div class="mini"><h4>🛠 Top skills</h4><div class="chips">${(a.topSkills||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div></div>
     <div class="mini"><h4>✅ Strengths</h4><div class="chips">${(a.strengths||[]).map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div></div>
     <div class="mini"><h4>⚠️ Gaps for ${esc(state.country)}</h4><div class="chips">${(a.gaps||[]).map(x=>`<span class="chip gap">${esc(x)}</span>`).join('')}</div></div>
   </div>`;
@@ -1220,9 +1263,9 @@ function renderResults(d){
   }
 
   // filters
-  const liveN=(d.opportunities||[]).filter(o=>o._live).length;
-  html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill">${liveN} live · ${(d.opportunities||[]).length-liveN} suggested</span></div>
-  ${liveSummaryHTML(liveN)}
+  html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill" id="jobsPill"></span></div>
+  ${searchProfileHTML()}
+  <div id="liveSummary"></div>
   <div class="filters">
     <input class="grow" type="text" id="search" placeholder="🔍 Filter by company or role…" oninput="renderJobs()" />
     <select id="fcat" onchange="renderJobs()">
@@ -1245,28 +1288,149 @@ function renderResults(d){
 
   r.innerHTML=html;
   r.style.display='block';
+  syncProfileFilters();
+  renderTags();
+  renderLiveSummary();
   renderJobs();
   r.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-/* Says plainly what was and was not verified, including when nothing was. */
-function liveSummaryHTML(liveN){
-  const m=state.liveMeta;
-  const scope=`${daysLabel()}${state.filters.workSetup?', '+WS_LABEL[state.filters.workSetup]:''}, ${esc(state.country)}`;
-  if(!m||m.error){
-    return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">⚠️ Couldn't reach the live job feeds${m&&m.error?' ('+esc(m.error)+')':''}. Everything below is the recruiter's shortlist — the links open a search filtered to the ${daysLabel()}.</div>`;
-  }
-  if(!liveN){
-    return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">
-      🔍 No <b>verified</b> opening matched ${esc(scope)} — ${m.checked} shortlisted companies and ${m.scanned} live postings were checked.
-      Coverage is strongest for remote roles and for companies using Greenhouse, Lever or Ashby; on-site roles in markets served mainly by regional boards often will not appear here.
-      Everything below is the recruiter's shortlist, with every link filtered to the ${daysLabel()}. Widening <b>Posted within</b> usually helps.
-    </div>`;
-  }
-  return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">
-    ✅ <b>${liveN}</b> verified opening${liveN===1?'':'s'} — real postings with the date and link their source published, matching ${esc(scope)}.
-    Checked against ${m.checked} shortlisted companies' careers feeds and ${m.scanned} live board postings.
+/* ---------- search profile: the tags and filters every live opening must match ---------- */
+function searchProfileHTML(){
+  const opts=id=>document.getElementById(id).innerHTML;
+  return `<div class="panel" id="searchProfile" style="margin-bottom:14px">
+    <div class="sp-head"><b>🎯 Search profile</b>
+      <span class="note" style="margin:0">Read from your resume. Remove anything that doesn't fit and add what's missing, then press <b>Update results</b>. A live opening is only shown if it matches <b>all</b> of this.</span></div>
+    <div class="sp-group">
+      <label class="lab" for="tagIn-roles">Positions <small>— the job title must be one of these</small></label>
+      <div class="tagbox" id="tags-roles" onclick="focusTagInput('roles',event)"></div>
+    </div>
+    <div class="sp-group">
+      <label class="lab" for="tagIn-skills">Skills <small>— the job description must mention at least one; more matches rank higher</small></label>
+      <div class="tagbox" id="tags-skills" onclick="focusTagInput('skills',event)"></div>
+    </div>
+    <div class="sp-filters">
+      <div><label class="lab" for="spCountry">Country</label><select id="spCountry" onchange="profileFilterChanged('country')">${opts('country')}</select></div>
+      <div><label class="lab" for="spDays">Posted within</label><select id="spDays" onchange="profileFilterChanged('datePosted')">${opts('datePosted')}</select></div>
+      <div><label class="lab" for="spSetup">Work setup</label><select id="spSetup" onchange="profileFilterChanged('workSetup')">${opts('workSetup')}</select></div>
+      <div><label class="lab" for="spStage">Career stage</label><select id="spStage" onchange="profileFilterChanged('seniority')">${opts('seniority')}</select></div>
+    </div>
+    <div class="sp-actions">
+      <button class="cta inline" id="spUpdate" onclick="refreshLive()">Update results</button>
+      <span class="note" id="spStatus"></span>
+    </div>
   </div>`;
+}
+/* The panel's filters and the ones at the top of the page are the same setting. */
+const PROFILE_SELECTS={country:'spCountry',datePosted:'spDays',workSetup:'spSetup',seniority:'spStage'};
+function syncProfileFilters(){
+  for(const [top,sp] of Object.entries(PROFILE_SELECTS)){const a=$(top),b=$(sp);if(a&&b)b.value=a.value;}
+}
+function profileFilterChanged(top){
+  const a=$(top),b=$(PROFILE_SELECTS[top]);
+  if(!a||!b)return;
+  a.value=b.value;
+  if(top!=='seniority')try{localStorage.setItem(top,a.value);}catch{}
+  markProfileDirty();
+}
+['country','datePosted','workSetup','seniority'].forEach(id=>$(id).addEventListener('change',()=>{syncProfileFilters();markProfileDirty();}));
+function markProfileDirty(){
+  const s=$('spStatus');
+  if(s&&state.lastAnalysis)s.textContent='Changed — press Update results to search again.';
+}
+
+function renderTags(){
+  for(const kind of ['roles','skills']){
+    const box=$('tags-'+kind);
+    if(!box)continue;
+    const list=state.tags[kind];
+    const ph=kind==='roles'?'Add a position, e.g. Platform Engineer':'Add a skill, e.g. Kubernetes';
+    box.innerHTML=list.map((t,i)=>`<span class="chip${state.tags.added.has(kind+':'+t.toLowerCase())?' added':''}">${esc(t)}<button type="button" aria-label="Remove ${esc(t)}" title="Remove" onclick="removeTag('${kind}',${i})">×</button></span>`).join('')
+      +`<input type="text" id="tagIn-${kind}" placeholder="${list.length?ph:(kind==='roles'?'Add at least one position':'Add skills')}" onkeydown="tagKey('${kind}',event)" onblur="commitTag('${kind}',false)" onpaste="setTimeout(()=>commitTag('${kind}'),0)">`;
+  }
+}
+function focusTagInput(kind,e){if(e.target===e.currentTarget)$('tagIn-'+kind).focus();}
+function tagKey(kind,e){
+  const inp=e.target;
+  if(e.key==='Enter'||e.key===','||e.key===';'){e.preventDefault();commitTag(kind);}
+  else if(e.key==='Backspace'&&!inp.value&&state.tags[kind].length){removeTag(kind,state.tags[kind].length-1);}
+}
+/* Pasting "React, Node.js; AWS" adds three tags. */
+function commitTag(kind,refocus=true){
+  const inp=$('tagIn-'+kind);
+  if(!inp)return;
+  const parts=inp.value.split(/[,;\n]+/).map(s=>s.trim()).filter(Boolean);
+  if(!parts.length)return;
+  const before=state.tags[kind].length;
+  state.tags[kind]=cleanTags([...state.tags[kind],...parts]).slice(0,kind==='roles'?12:40);
+  state.tags[kind].slice(before).forEach(t=>state.tags.added.add(kind+':'+t.toLowerCase()));
+  renderTags();
+  if(refocus)$('tagIn-'+kind).focus();
+  markProfileDirty();
+}
+function removeTag(kind,i){
+  state.tags[kind].splice(i,1);
+  renderTags();
+  $('tagIn-'+kind).focus();
+  markProfileDirty();
+}
+
+/* Search again with the edited tags and filters. Only the live search runs: the
+   resume analysis does not change, so there is no reason to wait on the model. */
+async function refreshLive(){
+  commitTag('roles',false);commitTag('skills',false);
+  if(!state.tags.roles.length){toast('Add at least one position');$('tagIn-roles').focus();return;}
+  const country=csel.value, days=Number(dsel.value)||0, workSetup=wsel.value;
+  state.filters={days,workSetup,country};
+  const btn=$('spUpdate'), st=$('spStatus');
+  btn.disabled=true; btn.textContent='Searching…';
+  st.textContent='Checking live feeds and opening every link — this takes up to a minute.';
+  try{
+    const live=await findLiveJobs();
+    state.live=live.jobs||[];
+    state.liveMeta=live.meta||null;
+    // Suggestions were picked for one country; they are not offered for another.
+    const sugg=state.suggestionsCountry===country?(state.suggestions||[]):[];
+    state.jobs=[...state.live.map(liveToJob),...sugg];
+    state.drafts={};
+    st.textContent='Updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.';
+  }catch(e){
+    st.textContent='';showErr(e.message||String(e));
+  }finally{
+    btn.disabled=false;btn.textContent='Update results';
+  }
+  renderLiveSummary();
+  renderJobs();
+}
+
+/* Says plainly what was and was not verified, including when nothing was, and why
+   postings were left out — a short list should never look like a broken search. */
+const REJECT_LABEL={date:'posted outside {days}',position:'a different position or seniority',setup:'not {setup}',
+  country:'not open to {country}',skills:"didn't mention any of your skills",link:'link dead or not the posting',duplicate:'duplicates'};
+function renderLiveSummary(){
+  const el=$('liveSummary');
+  if(!el)return;
+  const liveN=state.live.length, sugN=state.jobs.length-liveN;
+  const pill=$('jobsPill'); if(pill)pill.textContent=`${liveN} live · ${sugN} suggested`;
+  const m=state.liveMeta, f=state.filters;
+  const scope=`${daysLabel()}${f.workSetup?', '+WS_LABEL[f.workSetup]:''}, ${esc(f.country)}`;
+  const box=inner=>`<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px;line-height:1.6">${inner}</div>`;
+  const otherCountry=state.suggestionsCountry&&state.suggestionsCountry!==f.country
+    ?`<br>The recruiter's suggestions were picked for ${esc(state.suggestionsCountry)}, so they are hidden. Press <b>Analyze</b> again to get suggestions for ${esc(f.country)}.`:'';
+  if(!m||m.error){
+    el.innerHTML=box(`⚠️ Couldn't search the live job feeds${m&&m.error?' ('+esc(m.error)+')':''}.${sugN?` Below is the recruiter's shortlist — its links open a search filtered to the ${daysLabel()}.`:''}${otherCountry}`);
+    return;
+  }
+  const r=m.rejected||{};
+  const why=Object.entries(r).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1])
+    .map(([k,n])=>`${n.toLocaleString()} ${esc((REJECT_LABEL[k]||k).replace('{days}',daysLabel()).replace('{setup}',(WS_LABEL[f.workSetup]||'').toLowerCase()).replace('{country}',f.country))}`);
+  const tally=`Checked ${Number(m.scanned||0).toLocaleString()} live postings${m.checked?` and ${m.checked} shortlisted companies' careers feeds`:''}.${why.length?' Left out: '+why.join(' · ')+'.':''}`;
+  if(!liveN){
+    el.innerHTML=box(`🔍 No opening matched <b>all</b> of your search profile (${esc(scope)}). ${tally}
+      <br>Coverage is strongest for remote roles and for companies using Greenhouse, Lever or Ashby. Try a wider <b>Posted within</b>, another position, or more skills.${sugN?' The recruiter\'s shortlist is below.':''}${otherCountry}`);
+    return;
+  }
+  el.innerHTML=box(`✅ <b>${liveN}</b> live opening${liveN===1?'':'s'} matching ${esc(scope)}, your positions and your skills — each link opened and checked just now. ${tally}${otherCountry}`);
 }
 
 const CATLABEL={live:'✅ Live openings',high:'🟢 High-probability',medium:'🟡 Medium-probability',stretch:'🔵 Stretch'};
@@ -1286,10 +1450,6 @@ function liFilter(){                       // LinkedIn
 function indeedFilter(){                   // Indeed
   const d=state.filters.days;
   return (d>0?'&fromage='+Math.min(d,30):'')+'&sort=date';
-}
-function gdFilter(){                       // Glassdoor
-  const d=state.filters.days;
-  return d>0?'&fromAge='+Math.min(d,30):'';
 }
 /* Google only exposes day / week / month reliably, so a 3-day or 2-week filter is
    widened to the nearest range it supports rather than silently dropped. */
@@ -1358,7 +1518,7 @@ function cardHTML(j){
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
       <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
       <a href="${glassdoorURL(j)}" target="_blank" rel="noopener">Glassdoor</a>
-      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers ↗</a>`:''}
+      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers site ↗</a>`:''}
     </div>
     <div class="actions">${applyActions(j,m)}</div>
   </div>`;
@@ -1379,13 +1539,16 @@ function liveCardHTML(j){
         <span class="chip good">${esc(ago||'live')}</span>${ws}
       </div>
     </div>
-    <div class="applyvia"><span class="via-dot">✅</span> Open now on <b>${esc(j._source||'a live feed')}</b> — posted ${esc(ago||'recently')}${j._linkState==='exact'?', link checked':j._linkState==='unconfirmed'?', link reachable but not confirmed':''}</div>
+    ${j._skills.length?`<div class="matchline">Matches your skills: ${j._skills.map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div>`:''}
+    <div class="applyvia"><span class="via-dot">✅</span> ${j._direct?'On the employer’s own careers page':'Open now on <b>'+esc(j._source||'a live feed')+'</b>'} — posted ${esc(ago||'recently')}.
+      ${j._linkState==='exact'?'Link opened just now: it goes to this posting and it is still open.'
+        :'Listed on '+esc(j._source||'the source')+'’s live feed just now. The site blocks automated visits, so its page could not be opened for a check.'}</div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in Similar on LinkedIn</a>
-      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers ↗</a>`:''}
+      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers site ↗</a>`:''}
     </div>
     <div class="actions">
-      <a class="btn apply" href="${j._url}" target="_blank" rel="noopener">↗ Open this posting</a>
+      <a class="btn apply" href="${esc(safeURL(j._url))}" target="_blank" rel="noopener">↗ Open this posting</a>
       <button class="btn mail" id="mail-${j._i}" onclick="openEmailDraft(${j._i})">✉️ Apply by Email</button>
     </div>
   </div>`;
@@ -1395,7 +1558,7 @@ function liveCardHTML(j){
 function kw(j){return ((j.role||'')+' '+(j.company||'')).trim();}
 // Google search scoped to a board/agency domain — robust when a board's own query
 // params aren't stable; always lands the user on relevant, real listings.
-function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+state.country+wsWord())}`+googleFilter();}
+function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+searchPlace()+wsWord())}`+googleFilter();}
 function slug(s){return (s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 
 /* `search:true` means the link opens a search, not the job. Those buttons say so:
@@ -1405,15 +1568,15 @@ const PLATFORMS={
   linkedin:   {icon:'🔗',label:'LinkedIn',            cta:'Search LinkedIn',        search:true, url:linkedinEasyApplyURL},
   indeed:     {icon:'🟦',label:'Indeed',              cta:'Search Indeed',          search:true, url:indeedURL},
   glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Search Glassdoor',       search:true, url:glassdoorURL},
-  bayt:       {icon:'🟧',label:'Bayt',                cta:'Search Bayt',            search:true, url:j=>`https://www.bayt.com/en/jobs/q/${enc(slug(j.role))}/`},
-  naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Search NaukriGulf',      search:true, url:j=>`https://www.naukrigulf.com/jobs-search-results?keyword=${enc(kw(j))}`},
+  bayt:       {icon:'🟧',label:'Bayt',                cta:'Search Bayt',            search:true, url:j=>siteSearch('bayt.com',j)},
+  naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Search NaukriGulf',      search:true, url:j=>siteSearch('naukrigulf.com',j)},
   gulftalent: {icon:'🟦',label:'GulfTalent',          cta:'Search GulfTalent',      search:true, url:j=>siteSearch('gulftalent.com',j)},
   tasc:       {icon:'🏢',label:'TASC Outsourcing',    cta:'Search TASC',            search:true, url:j=>siteSearch('tascoutsourcing.com',j)},
   hays:       {icon:'🏢',label:'Hays',                cta:'Search Hays',            search:true, url:j=>siteSearch('hays.com',j)},
-  career_page:{icon:'🏢',label:'Company career page', cta:'Open the careers page',  url:careerURL},
+  career_page:{icon:'🏢',label:'its own careers site', cta:'Search its careers site', search:true, url:careerURL},
   email:      {icon:'✉️',label:'Email application',    cta:'Apply by Email',         url:null},
   // A live posting already has its own URL, checked to land on that posting.
-  live:       {icon:'✅',label:'Live posting',        cta:'Open this posting',      url:j=>j._url}
+  live:       {icon:'✅',label:'Live posting',        cta:'Open this posting',      url:j=>esc(safeURL(j._url))}
 };
 // Normalize model variants/typos onto known platform keys.
 const METHOD_ALIASES={'indeed plus':'indeed','indeedplus':'indeed','linked in':'linkedin','naukri':'naukrigulf','naukri gulf':'naukrigulf','gulf talent':'gulftalent','careerpage':'career_page','career':'career_page','company':'career_page','website':'career_page','mail':'email'};
@@ -1442,15 +1605,36 @@ function applyActions(j,m){
 
 /* ---------- link builders (real, live searches) ---------- */
 function enc(s){return encodeURIComponent(s||'');}
-function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+state.country+wsWord()+' careers apply job')}`+googleFilter();}
-function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}`+liFilter();}
+/* The country every search is for: the one in the filters now, not the one the
+   analysis ran with. "Remote (Global)" is not a place a board can search. */
+function curCountry(){return state.filters.country||state.country||'';}
+function isGlobal(){return /^remote/i.test(curCountry());}
+function searchPlace(){return isGlobal()?'worldwide':curCountry();}
+function liPlace(){return isGlobal()?'Worldwide':curCountry();}
+/* Only a web link may become an href: a feed could hand us javascript: or data:. */
+function safeURL(u){try{const x=new URL(String(u||''));return /^https?:$/.test(x.protocol)?x.href:'#';}catch{return '#';}}
+function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+searchPlace()+wsWord()+' careers apply job')}`+googleFilter();}
+function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}`+liFilter();}
 // LinkedIn jobs search pre-filtered to Easy Apply roles (f_AL=true), plus the
 // date-posted and workplace filters chosen on the page.
-function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}&f_AL=true`+liFilter();}
-// Company careers/jobs page when we have a confident domain, else a Google careers search.
-function careerURL(j){return j.careerDomain?`https://${(j.careerDomain||'').replace(/^https?:\/\//,'').replace(/\/+$/,'')}/careers`:applyURL(j);}
-function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||'')+wsWord())}&l=${enc(state.country)}`+indeedFilter();}
-function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||'')+wsWord())}`+gdFilter();}
+function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}&f_AL=true`+liFilter();}
+// A careers page lives at a different path on every site, and guessing /careers
+// 404s for many of them. Search the company's own domain instead.
+function careerDomainOf(j){return String(j.careerDomain||'').replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim().toLowerCase();}
+function careerURL(j){const d=careerDomainOf(j);return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)?`https://www.google.com/search?q=${enc('site:'+d+' '+(j.role||'')+' careers')}`+googleFilter():applyURL(j);}
+/* Indeed runs a separate site per country; the US site searching "Germany" finds
+   next to nothing. Countries without their own Indeed are searched through Google. */
+const INDEED_HOST={'United States':'www','United Kingdom':'uk','Canada':'ca','Germany':'de','Netherlands':'nl','Ireland':'ie','France':'fr','Switzerland':'ch','Sweden':'se','Spain':'es','Poland':'pl','United Arab Emirates':'ae','Saudi Arabia':'sa','Qatar':'qa','Pakistan':'pk','India':'in','Singapore':'sg','Australia':'au','New Zealand':'nz','Japan':'jp','Hong Kong':'hk','Malaysia':'malaysia','Turkey':'tr','Portugal':'pt','Italy':'it','Norway':'no','Denmark':'dk','Finland':'fi','Belgium':'be','Austria':'at','Czech Republic':'cz','Romania':'ro','Israel':'il','South Africa':'za','Egypt':'eg','Nigeria':'ng','Brazil':'br','Mexico':'mx','Argentina':'ar'};
+function indeedURL(j){
+  const q=(j.role||'')+' '+(j.company||'');
+  if(isGlobal())return `https://www.indeed.com/jobs?q=${enc(q)}&l=Remote`+indeedFilter();
+  const host=INDEED_HOST[curCountry()];
+  if(!host)return siteSearch('indeed.com',j);
+  return `https://${host}.indeed.com/jobs?q=${enc(q+wsWord())}&l=${enc(host==='www'?'United States':'')}`+indeedFilter();
+}
+/* Glassdoor's own search needs an internal location id to filter by country, and a
+   search without one is worldwide. A site search keeps the country and the date. */
+function glassdoorURL(j){return siteSearch('glassdoor.com',j);}
 
 /* ---------- email apply: generate → review → send ---------- */
 function buildSignature(){
