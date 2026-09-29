@@ -119,14 +119,21 @@ vercel          # preview
 vercel --prod
 ```
 
-How the hosted copy gets its AI depends on what you configure:
+**Deploy it and it works — no environment variables required.** Open the site, go to **⚙ Engine**, pick a provider, paste your API key and press **Connect**. The key is kept in your own browser and travels only with your own requests; the deployment stores nothing. Each visitor connects their own, and nobody sees anyone else's.
 
-- **Set an API key** in the Vercel project's environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or the `OFFERLY_OPENAI_*` trio) and the deployment answers on its own — anyone you share the link with can use it, billed to that key.
-- **Let each visitor bring their own key.** A serverless deployment has no writable disk, so the ⚙ panel keeps the key in that visitor's browser and sends it with each request. Nothing is stored on the server, and one person's key is never visible to another.
-- **Set nothing at all** and the page automatically falls back to a bridge on the visitor's own machine, exactly as before. Start it with
+The other two arrangements still work:
+
+- **Put a key in the project's environment variables** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or the `OFFERLY_OPENAI_*` trio) and the deployment answers for everyone, billed to that one key. Share the link only with people you mean to pay for.
+- **Run the bridge on your own machine** and the hosted page will use it, which is the way to keep using a Claude Code / Gemini / Codex / Cursor subscription rather than a paid API. Start it with
   `OFFERLY_ALLOWED_ORIGINS="https://your-app.vercel.app" node bridge.js`.
 
-To send email from the hosted copy, set the SMTP login as environment variables — a serverless deployment has no writable disk, so `offerly.mail.json` is not available there:
+The page picks between these by itself: it uses the deployment when the deployment can answer — on its own key or on yours — and only looks for a local bridge when neither can.
+
+### Sending email from the hosted copy
+
+Same rule. Enter your SMTP login under **✉ Email setup** and it is kept in your browser and sent with the message it is needed for. To have the deployment send for everyone instead, set the `OFFERLY_SMTP_*` variables below.
+
+The `OFFERLY_SMTP_*` variables, if you want the deployment itself to send:
 
 | Variable | Example |
 |----------|---------|
@@ -135,6 +142,8 @@ To send email from the hosted copy, set the SMTP login as environment variables 
 | `OFFERLY_SMTP_USER` | `you@gmail.com` |
 | `OFFERLY_SMTP_PASS` | your app password |
 | `OFFERLY_SMTP_FROM` / `OFFERLY_SMTP_FROM_NAME` | optional display address and name |
+
+A hosted backend deliberately ignores `offerly.mail.json` and `offerly.engines.json` even if a copy reaches the server, so a credential file left in a build can never be used or shown to visitors. Its `/api` endpoint also answers only pages served by that same deployment, so another website cannot spend your key. (The local bridge stays open on purpose — that is how a page hosted elsewhere reaches the agent on your machine.)
 
 Serverless limits worth knowing:
 

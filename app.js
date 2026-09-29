@@ -113,6 +113,9 @@ const ENV_MAIL = process.env.OFFERLY_SMTP_HOST ? {
 
 function loadMailCfg() {
   if (ENV_MAIL) return ENV_MAIL;
+  // A deployed image could carry a developer's own offerly.mail.json. Never use it:
+  // on a hosted backend the only trusted source is the environment.
+  if (HOSTED) return null;
   try { return JSON.parse(fs.readFileSync(MAIL_CFG, 'utf8')); } catch { return null; }
 }
 function saveMailCfg(cfg) {
@@ -121,7 +124,7 @@ function saveMailCfg(cfg) {
   fs.writeFileSync(MAIL_CFG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 }
 function publicMailCfg(cfg) {
-  const editable = !ENV_MAIL && !HOSTED;
+  const editable = !ENV_MAIL && !HOSTED; // false = the page must keep its own copy
   if (!cfg) return { configured: false, editable };
   const { pass, ...rest } = cfg;
   return { ...rest, hasPassword: !!pass, editable, configured: !!(cfg.host && cfg.user && pass) };
@@ -144,8 +147,25 @@ function parseRecipients(to) {
   if (list.length > 10) throw new Error('Too many recipients (max 10).');
   return list;
 }
-async function sendApplication({ to, cc, subject, body, attachment }) {
-  const cfg = loadMailCfg();
+// A hosted copy has nowhere to store an SMTP login, so the page may carry its own.
+// Only our own pages can pass one (see PROTECTED), and it is never written to disk.
+function mailFrom(override) {
+  if (override && override.host && override.user && override.pass) {
+    return {
+      host: String(override.host).trim(),
+      port: Number(override.port) || 587,
+      user: String(override.user).trim(),
+      pass: String(override.pass).replace(/\s+/g, ''),
+      fromName: String(override.fromName || '').trim(),
+      fromEmail: String(override.fromEmail || '').trim(),
+      bccSelf: !!override.bccSelf,
+    };
+  }
+  return loadMailCfg();
+}
+
+async function sendApplication({ to, cc, subject, body, attachment, mail: creds }) {
+  const cfg = mailFrom(creds);
   if (!cfg || !cfg.host || !cfg.user || !cfg.pass) throw new Error('Email sending is not set up yet. Open “Email setup” first.');
   const recipients = parseRecipients(to);
   if (!String(subject || '').trim()) throw new Error('Add a subject line.');
@@ -211,6 +231,10 @@ function logResponse(model, prompt, text) {
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
   '/api/engine-config', '/api/engine-connect', '/api/engine-forget']);
+// A hosted deployment may hold the owner's API key, so its AI endpoint must not be
+// callable from other websites. The local bridge deliberately stays open: that is how
+// a page hosted elsewhere reaches the agent on your machine.
+if (HOSTED) PROTECTED.add('/api');
 
 // --- routes ----------------------------------------------------------------
 async function handle(req, res) {
@@ -247,6 +271,10 @@ async function handle(req, res) {
       ok: list.some(e => e.available),
       engines: list,
       defaultEngine: engines.defaultEngine(),
+      // Where to point the picker when nothing is connected yet: on a hosted copy
+      // that is the first engine a visitor could enable with a key of their own.
+      suggested: engines.defaultEngine() || (list.find(e => e.kind === 'api' && !e.blocked) || {}).id || null,
+      hosted: engines.SERVERLESS,
       canSave: !engines.SERVERLESS, // a serverless deployment has no writable disk
     });
   }
@@ -271,7 +299,9 @@ async function handle(req, res) {
     if (req.method === 'POST' && url === '/api/engine-connect') {
       const { engine, model, values, remember } = await readJSON(req, 1e5);
       if (!engine) throw new Error('Missing engine.');
-      if (remember !== false && values && Object.keys(values).length) engines.saveConfig(engine, values);
+      if (remember !== false && !engines.SERVERLESS && values && Object.keys(values).length) {
+        engines.saveConfig(engine, values);
+      }
       const result = await engines.test(engine, model, values || null);
       return sendJSON(res, 200, { ...result, engineInfo: engines.describe(engines.BY_ID.get(engine)) });
     }
@@ -321,8 +351,9 @@ async function handle(req, res) {
     }
 
     if (req.method === 'POST' && url === '/api/mail-test') {
-      const cfg = loadMailCfg();
-      if (!cfg || !cfg.pass) throw new Error('Save your email settings first.');
+      const b = await readJSON(req, 1e5);
+      const cfg = mailFrom(b && b.mail);
+      if (!cfg || !cfg.pass) throw new Error('Enter your email settings first.');
       await mailer(cfg).verify();
       return sendJSON(res, 200, { ok: true });
     }

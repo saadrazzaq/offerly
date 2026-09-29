@@ -293,6 +293,9 @@
       <input type="checkbox" id="engineRememberBox" checked style="width:auto;margin:0">
       Save this key on my computer (in <code>offerly.engines.json</code>). Untick to keep it in this browser only.
     </label>
+    <p class="note" id="engineBrowserOnly" style="display:none">
+      This site cannot store keys, so yours is kept in this browser only and sent with your own requests. Nobody else using this site can see it.
+    </p>
     <p class="note" id="engineStatus"></p>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="cta" id="engineConnect" style="flex:1" onclick="connectEngine()">Connect</button>
@@ -419,28 +422,47 @@ async function probe(base){
 async function checkBridge(){
   const dot=document.getElementById('bridgeStatus'), note=document.getElementById('bridgeNote');
   dot.style.display='inline-block';
-  /* Prefer this site's own backend; fall back to a bridge on the user's machine. */
+
+  /* Pick a backend. This site's own is right when it can answer by itself, and
+     also when this browser holds a key that makes it able to — that is how a
+     hosted copy works with nothing configured on the server. Only when neither
+     is true do we look for a bridge on the visitor's machine. */
   let j=SELF?await probe(SELF):null;
-  if(j&&j.ok){BRIDGE=SELF;REMOTE=false;}
-  else{
+  let base=SELF;
+  if(!j||(!j.ok&&!browserCanDrive(j))){
     const local=await probe(LOCAL_BRIDGE);
-    if(local){BRIDGE=LOCAL_BRIDGE;REMOTE=!!(SELF&&SELF!==LOCAL_BRIDGE);j=local;}
+    if(local){j=local;base=LOCAL_BRIDGE;}
   }
-  if(j)renderEngines(j.engines,j.defaultEngine,j.canSave);
-  if(j&&j.ok){
-    const e=(j.engines||[]).find(x=>x.id===(localStorage.getItem('engine')||j.defaultEngine))||{};
-    dot.style.color='var(--green)';dot.title='Connected';
-    if(note)note.innerHTML='🟢 Connected — running on <b>'+(e.label||'your AI agent')+'</b>'+(REMOTE?' on your machine':'')+'.';
-  }else if(j){
-    dot.style.color='var(--amber)';
-    if(note)note.innerHTML='🟡 Connected, but no AI agent is set up yet. Pick one above to see how to enable it, then reload.';
-    showErr('No AI agent is available yet. Open ⚙ Engine to see what Offerly can run on and how to enable it.');
-  }else{
+  if(!j){
+    BRIDGE=SELF||LOCAL_BRIDGE;
     dot.style.color='var(--red)';dot.title='Offline';
-    if(note)note.innerHTML=SELF
-      ? '🔴 Can\'t reach an AI backend. This site has no API key of its own, so it runs the AI on <u>your machine</u>: open the project folder and run <b>start.cmd</b> (or <code>node bridge.js</code>), then reload. If it\'s already running, allow this site\'s “insecure / local network” request when your browser prompts.'
-      : '🔴 Bridge offline. Run <b>start.cmd</b> in the project folder, then open <a href="'+LOCAL_BRIDGE+'/">'+LOCAL_BRIDGE+'/</a>';
-    showErr('⚠️ No AI backend reachable. Start the local bridge (start.cmd / node bridge.js) and reload — see ⚙ Engine for details.');
+    setNote(SELF
+      ? '🔴 Can\'t reach a backend at <b>'+SELF+'</b>. If you are running Offerly locally, start it with <b>start.cmd</b> (or <code>node bridge.js</code>) and reload.'
+      : '🔴 Bridge offline. Run <b>start.cmd</b> in the project folder, then open <a href="'+LOCAL_BRIDGE+'/">'+LOCAL_BRIDGE+'/</a>');
+    showErr('⚠️ No backend reachable. Start the local bridge (start.cmd / node bridge.js) and reload.');
+    return;
+  }
+
+  BRIDGE=base||LOCAL_BRIDGE;
+  REMOTE=!!(SELF&&BRIDGE!==SELF);
+  HOSTED_BACKEND=!!j.hosted;
+  renderEngines(j.engines,j.suggested||j.defaultEngine,j.canSave);
+
+  const e=engineInfo();
+  if(engineUsable(e)){
+    dot.style.color='var(--green)';dot.title='Connected';
+    setNote('🟢 Connected — running on <b>'+e.label+'</b>'
+      +(REMOTE?' on your machine':'')
+      +(!e.available&&localCreds(e.id)?', with the key stored in this browser':'')+'.');
+    showErr('');
+  }else{
+    dot.style.color='var(--amber)';dot.title='Not connected';
+    setNote(HOSTED_BACKEND
+      ? '🟡 Almost there — choose an engine above, paste its API key and press <b>Connect</b>. Your key is kept in this browser and sent only with your own requests; it is never stored on this site.'
+      : '🟡 No AI agent connected yet. Choose one above and press <b>Connect</b>.');
+    showErr(HOSTED_BACKEND
+      ? 'Open ⚙ Engine, pick an AI provider and paste your API key to start.'
+      : 'No AI agent is connected yet. Open ⚙ Engine, pick one and press Connect.');
   }
 }
 
@@ -449,7 +471,10 @@ async function checkBridge(){
    you paste here, shows up without a code change. The model choice is kept per
    engine — a Claude model must not leak into a Gemini run. */
 let CAN_SAVE=true;
-function currentEngine(){return localStorage.getItem('engine')||'';}
+function currentEngine(){
+  const sel=$('engine');
+  return localStorage.getItem('engine')||(sel&&sel.value)||'';
+}
 function engineInfo(id){return ENGINES.find(x=>x.id===(id||currentEngine()))||null;}
 
 /* A key the server cannot store (hosted deployment, or you chose not to save it)
@@ -470,7 +495,7 @@ function renderEngines(list,def,canSave){
     o.textContent=e.label+(e.available?'':(localCreds(e.id)?' — key in this browser':' — not connected'));
     sel.appendChild(o);   /* selectable even when unconnected, so you can set it up */
   });
-  const pick=(saved&&ENGINES.some(e=>e.id===saved))?saved:def;
+  const pick=(saved&&ENGINES.some(e=>e.id===saved))?saved:(def||(ENGINES.find(e=>!e.blocked)||{}).id);
   if(pick)sel.value=pick;
   sel.onchange=()=>renderEngineDetail(sel.value);
   renderEngineDetail(sel.value);
@@ -504,8 +529,11 @@ function renderEngineDetail(id){
       if(hint.textContent)wrap.appendChild(hint);
       box.appendChild(wrap);
     });
+    const hasSecret=!!(e&&e.fields&&e.fields.some(f=>f.secret));
     const rememberRow=$('engineRemember');
-    if(rememberRow)rememberRow.style.display=(e&&e.fields&&e.fields.some(f=>f.secret))?'':'none';
+    if(rememberRow)rememberRow.style.display=(hasSecret&&CAN_SAVE)?'':'none';
+    const browserOnly=$('engineBrowserOnly');
+    if(browserOnly)browserOnly.style.display=(hasSecret&&!CAN_SAVE)?'':'none';
     const forget=$('engineForget');
     if(forget)forget.style.display=(e&&e.fields&&e.fields.some(f=>f.set||held[f.key]))?'':'none';
   }
@@ -568,6 +596,14 @@ async function forgetEngine(){
   renderEngineDetail(id);
   checkBridge();
 }
+/* A hosted deployment stores nothing: what makes an engine usable there is a key
+   held in this browser. Readiness has to account for both. */
+let HOSTED_BACKEND=false;
+function engineUsable(e){return !!e&&(e.available||!!localCreds(e.id));}
+function browserCanDrive(j){
+  return (j.engines||[]).some(e=>e.kind==='api'&&!e.blocked&&localCreds(e.id));
+}
+function setNote(html){const n=document.getElementById('bridgeNote');if(n)n.innerHTML=html;}
 function listJoin(a){return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
 function escapeHTMLish(t){const d=document.createElement('div');d.textContent=String(t);return d.innerHTML;}
 checkBridge();
@@ -1131,6 +1167,7 @@ async function sendDraftEmail(){
   btn.disabled=true;btn.classList.remove('confirm');btn.textContent='Sending…';
   try{
     await post('/api/send-email',{
+      mail:localMail(),
       to,subject,body,
       attachment: state.resumeFile?{filename:state.resumeFile.name,contentType:state.resumeFile.type,data:state.resumeFile.data}:undefined,
     });
@@ -1155,6 +1192,10 @@ function validateDraft(to,subject,body){
 }
 
 /* ---------- bridge POST helper + SMTP mail setup ---------- */
+/* SMTP login kept in this browser, used when the backend has nowhere to store one. */
+function localMail(){try{return JSON.parse(localStorage.getItem('mail.local')||'null');}catch{return null;}}
+function setLocalMail(v){try{v?localStorage.setItem('mail.local',JSON.stringify(v)):localStorage.removeItem('mail.local');}catch{}}
+
 async function post(path,body){
   let res;
   try{ res=await fetch(BRIDGE+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }

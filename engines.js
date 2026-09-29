@@ -277,6 +277,9 @@ const BY_ID = new Map(ENGINES.map(e => [e.id, e]));
 // > what you saved through the UI > the environment.
 let SAVED = readSaved();
 function readSaved() {
+  // A deployed image could carry a developer's own offerly.engines.json. Never use
+  // it: on a serverless backend the only trusted source is the environment.
+  if (SERVERLESS) return {};
   try { return JSON.parse(fs.readFileSync(CFG_FILE, 'utf8')); } catch { return {}; }
 }
 function cfgOf(e, override) {
