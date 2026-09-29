@@ -16,7 +16,7 @@
 // to that exact posting. Nothing is inferred and nothing is invented.
 const UA = 'Mozilla/5.0 (compatible; Offerly/1.2; +https://github.com/saadrazzaq/offerly)';
 const REQ_TIMEOUT = 12000;
-const PROBE_BUDGET = 60; // ATS requests per search, so a long shortlist cannot stall
+const PROBE_BUDGET = 110; // ATS requests per search, so a long shortlist cannot stall
 
 async function getJSON(url, timeout = REQ_TIMEOUT) {
   const r = await fetch(url, {
@@ -140,6 +140,12 @@ const ATS = [
   {
     id: 'greenhouse', label: 'Greenhouse',
     url: t => `https://boards-api.greenhouse.io/v1/boards/${t}/jobs?content=false`,
+    // Tokens are guessed from the company name, so a guess can land on someone
+    // else's board. Greenhouse says whose board it is, so check before trusting it.
+    verify: (j, company) => {
+      const said = (j.jobs || []).map(x => x.company_name).find(Boolean);
+      return !said || nameMatches(said, company);
+    },
     parse: (j, company) => (j.jobs || []).map(x => posting({
       title: x.title, company, url: x.absolute_url,
       postedAt: x.first_published || x.updated_at,
@@ -185,6 +191,14 @@ function tokensFor(company) {
   return [...new Set([flat, hyphen].filter(t => t.length >= 2 && t.length <= 40))];
 }
 
+// "Acme Corp" and "Acme" are the same employer; "Acme" and "Acme Bank" are not
+// necessarily, but one containing the other is close enough to accept.
+function nameMatches(a, b) {
+  const n = x => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const x = n(a), y = n(b);
+  return !!x && !!y && (x.includes(y) || y.includes(x));
+}
+
 async function probeCompany(company, budget) {
   for (const token of tokensFor(company)) {
     for (const ats of ATS) {
@@ -192,6 +206,7 @@ async function probeCompany(company, budget) {
       budget.left--;
       try {
         const j = await getJSON(ats.url(token), 9000);
+        if (ats.verify && !ats.verify(j, company)) continue;   // someone else's board
         const jobs = ats.parse(j, company).filter(p => p.url && p.title);
         if (jobs.length) return jobs;
       } catch (_) { /* 404 just means this company is not on that ATS */ }
@@ -199,6 +214,9 @@ async function probeCompany(company, budget) {
   }
   return [];
 }
+
+// An employer's own careers feed, as opposed to a board's copy of the posting.
+const DIRECT_SOURCES = new Set(['greenhouse', 'lever', 'ashby']);
 
 // --- relevance --------------------------------------------------------------
 // Matching used to pool every target role into one bag of words, so a single word
@@ -393,28 +411,68 @@ function matchesCountry(p, country, workSetup) {
 }
 
 // --- link checking ----------------------------------------------------------
-// A feed can list a posting that the employer has already taken down, and a dead
-// link is the single most annoying thing this page could hand someone. Only the
-// postings actually about to be shown are checked, so the cost stays small.
-// Anything that cannot be reached at all (a network error, a site blocking us) is
-// kept: the failure is ours, not the link's.
-async function linkAlive(url) {
+// A feed can list a posting the employer has already pulled, and a dead link is the
+// most annoying thing this page could hand someone. A status code is not enough:
+// most boards answer 200 with a "this job is no longer available" page.
+//
+// The phrases are matched on word boundaries. A plain substring test reads "Salary
+// Undisclosed" as closed, which would throw away perfectly live postings — the same
+// trap that had "lausanne" sitting in the United States.
+const DEAD_PAGE = new RegExp([
+  'no longer (?:available|accepting applications|open|active)',
+  'this (?:job|position|posting|listing|opening) (?:has )?(?:expired|been closed|been filled|is closed)',
+  '(?:job|position|posting|listing) (?:has )?expired',
+  'position (?:has been )?filled',
+  'applications (?:are )?closed',
+  'we (?:could ?n.t|cannot) find that job',
+  'job not found',
+].map(x => '\\b(?:' + x + ')\\b').join('|'), 'i');
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function hostOf(url) { try { return new URL(url).host; } catch { return url; } }
+
+// 'dead' is only returned when the source actually says so. A rate limit or an
+// outage is our problem, not the posting's, so those keep the link.
+async function checkLink(url) {
+  let r;
   try {
-    const r = await fetch(url, {
-      method: 'GET', redirect: 'follow',
-      headers: { 'user-agent': UA, accept: 'text/html,*/*' },
-      signal: AbortSignal.timeout(8000),
+    r = await fetch(url, {
+      redirect: 'follow',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+      },
+      signal: AbortSignal.timeout(10000),
     });
-    if (r.status === 404 || r.status === 410) return false;
-    return true;
   } catch (_) {
-    return true; // could not check — do not punish the posting for our own failure
+    return 'unknown';
   }
+  if (r.status === 404 || r.status === 410) return 'dead';
+  if (!r.ok) return 'unknown';                       // 429, 5xx: not the link's fault
+  if (!/html/i.test(r.headers.get('content-type') || '')) return 'alive';
+  let body;
+  try { body = (await r.text()).slice(0, 300000); } catch (_) { return 'unknown'; }
+  return DEAD_PAGE.test(body.replace(/<[^>]+>/g, ' ')) ? 'dead' : 'alive';
 }
 
+// These are small free services. Their links are checked one at a time per host,
+// spaced out; different hosts go in parallel. Firing everything at once earned
+// nothing but 429s, which made live postings look broken.
 async function dropDeadLinks(list) {
-  const results = await Promise.all(list.map(async p => (await linkAlive(p.url)) ? p : null));
-  return results.filter(Boolean);
+  const byHost = new Map();
+  for (const p of list) {
+    const h = hostOf(p.url);
+    if (!byHost.has(h)) byHost.set(h, []);
+    byHost.get(h).push(p);
+  }
+  const dead = new Set();
+  await Promise.all([...byHost.values()].map(async group => {
+    for (let i = 0; i < group.length; i++) {
+      if (await checkLink(group[i].url) === 'dead') dead.add(group[i]);
+      if (i < group.length - 1) await sleep(350);
+    }
+  }));
+  return list.filter(p => !dead.has(p));
 }
 
 // --- public entry point -----------------------------------------------------
@@ -496,16 +554,20 @@ async function search({ roles = [], companies = [], country = '', workSetup = ''
     if (seen.has(key)) continue;
     seen.add(key);
     p.score = score;
+    p.direct = DIRECT_SOURCES.has(p.source);
     all.push(p);
   }
 
-  // Freshest first, but a clearly better match wins a tie on the same day.
+  // Freshest first. Within the same day, a posting on the employer's own careers
+  // feed beats an aggregator's copy — it is the source, and its link outlives the
+  // aggregator's — and then the better match wins.
   all.sort((a, b) => {
     const d = Date.parse(b.postedAt) - Date.parse(a.postedAt);
     if (Math.abs(d) > 43200000) return d;
-    return (b.score - a.score) || d;
+    return (Number(b.direct) - Number(a.direct)) || (b.score - a.score) || d;
   });
-  const shown = (await dropDeadLinks(all.slice(0, limit))).map(({ desc, ...rest }) => rest);
+  const shown = (await dropDeadLinks(all.slice(0, Math.min(limit, 30))))
+    .map(({ desc, ...rest }) => rest);
   return {
     jobs: shown, sources, checked: shortlist.length, scanned: jobs.length,
     dropped: Math.min(all.length, limit) - shown.length,

@@ -86,9 +86,12 @@ Two different things, kept clearly apart on the page, because they are not equal
 | Arbeitnow | remote and on-site, strongest in Europe |
 | Greenhouse, Lever, Ashby | each shortlisted company's own careers feed — how on-site roles are found |
 
+Postings from a company's own feed are marked **direct** and sort above a board's copy of the same job on the same day: it is the source, its link outlives the aggregator's, and it is the one that stays accurate. Company tokens are guessed from the name, so where the feed says whose board it is, that is checked before its jobs are trusted.
+
 A posting is only shown if it clears all of these:
 
 - **Published inside your window**, per the source's own date.
+- **The link is checked before you see it.** A status code is not enough: most boards answer 200 with a "this job is no longer available" page, so the page text is read too. Phrases are matched on word boundaries, because a substring test reads "Salary Undisclosed" as closed and throws away live postings. A rate limit or an outage is treated as our problem, not the posting's, so those links are kept.
 - **The title matches one of your target roles as a phrase.** Each role is matched on its own rather than pooled into a bag of words — pooling was why "Data Engineer" in your list let "Data Entry Clerk" through on the word "data". A role's identifying words must all be present, and the head word has to agree, with `engineer`/`developer`/`programmer` treated as the same thing and `full stack`/`fullstack` spelled either way.
 - **The seniority is within one step of yours.** No internships for a senior engineer, and no engineering-director posts either.
 - **Your skills appear in the job description** where the title alone is too vague to judge. Descriptions also rank the survivors, so a posting naming your actual stack sorts above one that does not.
