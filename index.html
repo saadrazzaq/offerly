@@ -1001,7 +1001,8 @@ function liveToJob(p){
   return {company:p.company,role:p.title,location:p.location||'',companyType:'',
     category:'live',fitScore:0,careerDomain:'',applyMethod:'live',applyEmail:'',
     matchReasons:[],missingForRole:[],pitch:'',
-    _live:true,_url:p.url,_postedAt:p.postedAt,_source:p.sourceLabel||p.source,_workplace:p.workplace||''};
+    _live:true,_url:p.url,_postedAt:p.postedAt,_source:p.sourceLabel||p.source,_workplace:p.workplace||'',
+    _linkState:p.linkState||'',_direct:!!p.direct};
 }
 function timeAgo(iso){
   const t=Date.parse(iso); if(!t)return '';
@@ -1280,7 +1281,7 @@ function cardHTML(j){
     </div>
     <div class="reasons">${reasons}</div>
     ${miss}
-    <div class="applyvia"><span class="via-dot">🔍</span> Suggested — not a verified opening. <b>Apply via ${badge.label}</b>, filtered to the ${daysLabel()}.</div>
+    <div class="applyvia"><span class="via-dot">🔍</span> Suggested — no verified opening found. The button opens a <b>${badge.search?'search on '+badge.label:badge.label}</b> filtered to the ${daysLabel()}; it may return nothing if this company has not posted recently.</div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
       <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
@@ -1306,7 +1307,7 @@ function liveCardHTML(j){
         <span class="chip good">${esc(ago||'live')}</span>${ws}
       </div>
     </div>
-    <div class="applyvia"><span class="via-dot">✅</span> Open now on <b>${esc(j._source||'a live feed')}</b> — posted ${esc(ago||'recently')}</div>
+    <div class="applyvia"><span class="via-dot">✅</span> Open now on <b>${esc(j._source||'a live feed')}</b> — posted ${esc(ago||'recently')}${j._linkState==='exact'?', link checked':j._linkState==='unconfirmed'?', link reachable but not confirmed':''}</div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in Similar on LinkedIn</a>
       ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers ↗</a>`:''}
@@ -1325,18 +1326,21 @@ function kw(j){return ((j.role||'')+' '+(j.company||'')).trim();}
 function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+state.country+wsWord())}`+googleFilter();}
 function slug(s){return (s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 
+/* `search:true` means the link opens a search, not the job. Those buttons say so:
+   promising "Apply on LinkedIn" and landing on a results page — or on nothing at
+   all, once the date filter is applied — is the thing that reads as a broken link. */
 const PLATFORMS={
-  linkedin:   {icon:'🔗',label:'LinkedIn Easy Apply', cta:'Easy Apply on LinkedIn', url:linkedinEasyApplyURL},
-  indeed:     {icon:'🟦',label:'Indeed',              cta:'Apply on Indeed',        url:indeedURL},
-  glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Apply on Glassdoor',     url:glassdoorURL},
-  bayt:       {icon:'🟧',label:'Bayt',                cta:'Apply on Bayt',          url:j=>`https://www.bayt.com/en/jobs/q/${enc(slug(j.role))}/`},
-  naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Apply on NaukriGulf',    url:j=>`https://www.naukrigulf.com/jobs-search-results?keyword=${enc(kw(j))}`},
-  gulftalent: {icon:'🟦',label:'GulfTalent',          cta:'Apply on GulfTalent',    url:j=>siteSearch('gulftalent.com',j)},
-  tasc:       {icon:'🏢',label:'TASC Outsourcing',    cta:'Apply via TASC',         url:j=>siteSearch('tascoutsourcing.com',j)},
-  hays:       {icon:'🏢',label:'Hays',                cta:'Apply via Hays',         url:j=>siteSearch('hays.com',j)},
-  career_page:{icon:'🏢',label:'Company career page', cta:'Apply on career page',   url:careerURL},
+  linkedin:   {icon:'🔗',label:'LinkedIn',            cta:'Search LinkedIn',        search:true, url:linkedinEasyApplyURL},
+  indeed:     {icon:'🟦',label:'Indeed',              cta:'Search Indeed',          search:true, url:indeedURL},
+  glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Search Glassdoor',       search:true, url:glassdoorURL},
+  bayt:       {icon:'🟧',label:'Bayt',                cta:'Search Bayt',            search:true, url:j=>`https://www.bayt.com/en/jobs/q/${enc(slug(j.role))}/`},
+  naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Search NaukriGulf',      search:true, url:j=>`https://www.naukrigulf.com/jobs-search-results?keyword=${enc(kw(j))}`},
+  gulftalent: {icon:'🟦',label:'GulfTalent',          cta:'Search GulfTalent',      search:true, url:j=>siteSearch('gulftalent.com',j)},
+  tasc:       {icon:'🏢',label:'TASC Outsourcing',    cta:'Search TASC',            search:true, url:j=>siteSearch('tascoutsourcing.com',j)},
+  hays:       {icon:'🏢',label:'Hays',                cta:'Search Hays',            search:true, url:j=>siteSearch('hays.com',j)},
+  career_page:{icon:'🏢',label:'Company career page', cta:'Open the careers page',  url:careerURL},
   email:      {icon:'✉️',label:'Email application',    cta:'Apply by Email',         url:null},
-  // A live posting already has its own URL — no search needed.
+  // A live posting already has its own URL, checked to land on that posting.
   live:       {icon:'✅',label:'Live posting',        cta:'Open this posting',      url:j=>j._url}
 };
 // Normalize model variants/typos onto known platform keys.

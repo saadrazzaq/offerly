@@ -431,9 +431,30 @@ const DEAD_PAGE = new RegExp([
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function hostOf(url) { try { return new URL(url).host; } catch { return url; } }
 
-// 'dead' is only returned when the source actually says so. A rate limit or an
-// outage is our problem, not the posting's, so those keep the link.
-async function checkLink(url) {
+// A link that lands on a board's front page or its search results is not a link to
+// the job, even though it answers 200.
+const GENERIC_PATH = /^\/?(|jobs|careers|search|remote-jobs|jobs\/search|positions|openings|vacancies|home|index\.html)\/?$/i;
+
+// Does this page actually show this job? Titles get reworded slightly between a
+// feed and the page it points at, so most of the distinctive words having survived
+// is the right test, not an exact string match.
+function titleOnPage(title, text) {
+  const words = String(title).toLowerCase()
+    .replace(/[^a-z0-9+#. ]+/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !['with', 'from', 'this', 'that', 'your', 'remote', 'senior', 'staff'].includes(w));
+  if (!words.length) return true;                 // nothing distinctive to look for
+  const hay = text.toLowerCase();
+  const hits = words.filter(w => hay.includes(w)).length;
+  return hits / words.length >= 0.6;
+}
+
+// Returns where the link really goes and how sure we are it is the posting:
+//   dead        the source says it is gone, or it dumped us on a listing page
+//   exact       the page shows this job
+//   unconfirmed the page loaded but says nothing we can match, which is normal for a
+//               job board rendered entirely in the browser
+async function checkLink(url, title) {
   let r;
   try {
     r = await fetch(url, {
@@ -442,37 +463,53 @@ async function checkLink(url) {
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128 Safari/537.36',
         accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(12000),
     });
   } catch (_) {
-    return 'unknown';
+    return { state: 'unconfirmed', url };
   }
-  if (r.status === 404 || r.status === 410) return 'dead';
-  if (!r.ok) return 'unknown';                       // 429, 5xx: not the link's fault
-  if (!/html/i.test(r.headers.get('content-type') || '')) return 'alive';
+  if (r.status === 404 || r.status === 410) return { state: 'dead', url };
+  if (!r.ok) return { state: 'unconfirmed', url };        // 429, 5xx: not the link's fault
+
+  const finalUrl = r.url || url;
+  let landed;
+  try { landed = new URL(finalUrl); } catch (_) { landed = null; }
+  // Bounced to the board's front page or its search: the posting is gone.
+  if (landed && GENERIC_PATH.test(landed.pathname) && !landed.search) {
+    return { state: 'dead', url: finalUrl };
+  }
+  if (!/html/i.test(r.headers.get('content-type') || '')) return { state: 'unconfirmed', url: finalUrl };
+
   let body;
-  try { body = (await r.text()).slice(0, 300000); } catch (_) { return 'unknown'; }
-  return DEAD_PAGE.test(body.replace(/<[^>]+>/g, ' ')) ? 'dead' : 'alive';
+  try { body = (await r.text()).slice(0, 400000); } catch (_) { return { state: 'unconfirmed', url: finalUrl }; }
+  const text = body.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ');
+  if (DEAD_PAGE.test(text)) return { state: 'dead', url: finalUrl };
+  return { state: 'exact', url: finalUrl, exact: titleOnPage(title, text) };
 }
 
 // These are small free services. Their links are checked one at a time per host,
 // spaced out; different hosts go in parallel. Firing everything at once earned
 // nothing but 429s, which made live postings look broken.
-async function dropDeadLinks(list) {
+async function verifyLinks(list) {
   const byHost = new Map();
   for (const p of list) {
     const h = hostOf(p.url);
     if (!byHost.has(h)) byHost.set(h, []);
     byHost.get(h).push(p);
   }
-  const dead = new Set();
   await Promise.all([...byHost.values()].map(async group => {
     for (let i = 0; i < group.length; i++) {
-      if (await checkLink(group[i].url) === 'dead') dead.add(group[i]);
+      const p = group[i];
+      const v = await checkLink(p.url, p.title);
+      p.linkState = v.state === 'exact' ? (v.exact ? 'exact' : 'unconfirmed') : v.state;
+      // Follow the redirect once here so the person is not bounced again later.
+      if (v.url && v.url !== p.url) p.url = v.url;
       if (i < group.length - 1) await sleep(350);
     }
   }));
-  return list.filter(p => !dead.has(p));
+  return list.filter(p => p.linkState !== 'dead');
 }
 
 // --- public entry point -----------------------------------------------------
@@ -566,11 +603,12 @@ async function search({ roles = [], companies = [], country = '', workSetup = ''
     if (Math.abs(d) > 43200000) return d;
     return (Number(b.direct) - Number(a.direct)) || (b.score - a.score) || d;
   });
-  const shown = (await dropDeadLinks(all.slice(0, Math.min(limit, 30))))
+  const shown = (await verifyLinks(all.slice(0, Math.min(limit, 30))))
     .map(({ desc, ...rest }) => rest);
   return {
     jobs: shown, sources, checked: shortlist.length, scanned: jobs.length,
-    dropped: Math.min(all.length, limit) - shown.length,
+    dropped: Math.min(all.length, limit, 30) - shown.length,
+    unconfirmed: shown.filter(p => p.linkState !== 'exact').length,
   };
 }
 
