@@ -341,7 +341,7 @@
 <div class="modal" id="mailModal">
   <div class="mbox">
     <h3>Email setup</h3>
-    <p class="sub">Applications are sent from this account. Settings are stored in <code>offerly.mail.json</code> on your computer.</p>
+    <p class="sub" id="mailWhere">Applications are sent from this account.</p>
     <div class="presets">
       <button class="btn" type="button" onclick="preset('smtp.gmail.com',587)">Gmail</button>
       <button class="btn" type="button" onclick="preset('smtp.office365.com',587)">Outlook / Microsoft 365</button>
@@ -1545,9 +1545,27 @@ async function loadMailState(){
     const r=await fetch(BRIDGE+'/api/mail-config');
     state.mail=await r.json();
     if(!r.ok)throw new Error(state.mail.error);
-  }catch(e){state.mail={configured:false,error:e.message};}
+  }catch(e){
+    /* Keep whether the backend can store anything: losing it sends the next save
+       to a server that has already said it cannot keep it. */
+    state.mail={configured:false,editable:(state.mail||{}).editable,error:e.message};
+  }
+  /* Where the backend stores nothing, a login held here is what makes sending work. */
+  const held=localMail();
+  if(state.mail.editable===false&&held){
+    state.mail={...state.mail,...held,pass:undefined,hasPassword:!!held.pass,
+      configured:!!(held.host&&held.user&&held.pass),browserOnly:true,error:''};
+  }
+}
+/* Say where this login will actually be kept, which differs between a local
+   bridge and a hosted deployment. */
+function mailWhereText(){
+  return (state.mail&&state.mail.editable===false)
+    ? 'Applications are sent from this account. This site cannot store logins, so yours is kept in this browser only and sent with your own messages.'
+    : 'Applications are sent from this account. Settings are stored in offerly.mail.json on your computer.';
 }
 function openMail(){
+  const w=$('mailWhere'); if(w)w.textContent=mailWhereText();
   const m=state.mail||{};
   $('mHost').value=m.host||'';$('mPort').value=m.port||587;$('mUser').value=m.user||'';
   $('mPass').value='';$('mFromName').value=m.fromName||state.candidateName||'';$('mBcc').checked=!!m.bccSelf;
@@ -1556,8 +1574,20 @@ function openMail(){
 }
 function preset(host,port){$('mHost').value=host;$('mPort').value=port;}
 async function saveMail(silent){
+  const cfg={host:$('mHost').value.trim(),port:$('mPort').value,user:$('mUser').value.trim(),
+             pass:$('mPass').value,fromName:$('mFromName').value.trim(),bccSelf:$('mBcc').checked};
   try{
-    await post('/api/mail-config',{host:$('mHost').value,port:$('mPort').value,user:$('mUser').value,pass:$('mPass').value,fromName:$('mFromName').value,bccSelf:$('mBcc').checked});
+    if(state.mail&&state.mail.editable===false){
+      /* A hosted deployment has no disk to save to, so the login stays in this
+         browser and travels with the message that needs it. A blank password means
+         "keep the one already held". */
+      const held=localMail()||{};
+      if(!cfg.pass)cfg.pass=held.pass||'';
+      if(!cfg.host||!cfg.user||!cfg.pass)throw new Error('Enter the SMTP server, username and password.');
+      setLocalMail(cfg);
+    }else{
+      await post('/api/mail-config',cfg);
+    }
     await loadMailState();
     renderDraftMailState();
     if(!silent){closeModal('mailModal');toast('Email settings saved');}
@@ -1568,7 +1598,7 @@ async function testMail(){
   const b=$('mTest');b.disabled=true;b.textContent='Testing…';
   try{
     if(await saveMail(true)){
-      await post('/api/mail-test',{});
+      await post('/api/mail-test',{mail:localMail()});
       $('mPass').value='';$('mPassHint').textContent='A password is saved. Leave blank to keep it.';
       toast('Connected — you can send applications');
     }

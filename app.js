@@ -124,7 +124,7 @@ function loadMailCfg() {
 }
 function saveMailCfg(cfg) {
   if (ENV_MAIL) throw new Error('Email is set by environment variables on this deployment. Change OFFERLY_SMTP_* in your hosting project settings.');
-  if (HOSTED) throw new Error('This hosted deployment has no writable disk. Set OFFERLY_SMTP_HOST, OFFERLY_SMTP_PORT, OFFERLY_SMTP_USER and OFFERLY_SMTP_PASS as environment variables instead — or run the local bridge, where settings are saved to offerly.mail.json.');
+  if (HOSTED) throw new Error('This deployment cannot store an email login — its disk is wiped between requests. Reload the page and save again: your login is then kept in your own browser and sent with your own messages. To have the deployment send for everyone instead, set OFFERLY_SMTP_HOST, OFFERLY_SMTP_PORT, OFFERLY_SMTP_USER and OFFERLY_SMTP_PASS in the hosting project.');
   fs.writeFileSync(MAIL_CFG, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 }
 function publicMailCfg(cfg) {

@@ -278,7 +278,7 @@
 <div class="modal" id="mailModal">
   <div class="mbox">
     <h3>Email setup</h3>
-    <p class="sub">Applications are sent from this account. Settings are stored in <code>offerly.mail.json</code> on your computer.</p>
+    <p class="sub" id="mailWhere">Applications are sent from this account.</p>
     <div class="presets">
       <button class="btn" onclick="preset('smtp.gmail.com',587)">Gmail</button>
       <button class="btn" onclick="preset('smtp.office365.com',587)">Outlook / Microsoft 365</button>
@@ -1088,7 +1088,13 @@ async function loadMailState(){
     ?`<div class="dot" style="background:var(--green)"></div><span>Sending from <b>${esc(m.fromEmail||m.user)}</b></span><button class="ghost" onclick="openMail()">Change</button>`
     :`<div class="dot" style="background:var(--amber)"></div><span>${m.error?esc(m.error):'Email sending is not set up'}</span><button class="ghost" onclick="openMail()">Set up</button>`;
 }
+function mailWhereText(){
+  return (state.mail&&state.mail.editable===false)
+    ? 'Applications are sent from this account. This site cannot store logins, so yours is kept in this browser only and sent with your own messages.'
+    : 'Applications are sent from this account. Settings are stored in offerly.mail.json on your computer.';
+}
 function openMail(){
+  const w=$('mailWhere'); if(w)w.textContent=mailWhereText();
   const m=state.mail||{};
   $('mHost').value=m.host||'';$('mPort').value=m.port||587;$('mUser').value=m.user||'';
   $('mPass').value='';$('mFromName').value=m.fromName||$('cName').value||'';$('mBcc').checked=!!m.bccSelf;
