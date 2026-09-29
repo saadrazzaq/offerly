@@ -243,7 +243,27 @@
         <select id="country"></select>
       </div>
       <div class="field">
-        <label class="lab">3 · Target career stage</label>
+        <label class="lab">3 · Work setup</label>
+        <select id="workSetup">
+          <option value="">Any</option>
+          <option value="remote">Remote</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="onsite">On-site</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="lab">4 · Posted within</label>
+        <select id="datePosted">
+          <option value="1">Past 24 hours</option>
+          <option value="3">Past 3 days</option>
+          <option value="7" selected>Past week</option>
+          <option value="14">Past 2 weeks</option>
+          <option value="30">Past month</option>
+          <option value="0">Any time</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="lab">5 · Target career stage</label>
         <select id="seniority">
           <option value="auto">Auto-detect from resume</option>
           <option>Fresh / Entry-level</option>
@@ -269,7 +289,7 @@
 
   <footer>
     Runs on the AI agent you already have — Claude Code, Gemini, Codex, Cursor or your own key. Your resume stays on your machine.<br/>
-    Job links open real, live searches on LinkedIn / Indeed / Glassdoor / company career pages — nothing is fabricated.<br/>
+    Verified openings come from live job feeds with their own posting date and link. Suggestions open a search filtered to your dates — nothing is fabricated.<br/>
     ✉️ Apply by Email writes a tailored letter, lets you review and edit it, then sends it from your own account with your resume attached — set up sending once in ✉ Email.
   </footer>
 </div>
@@ -406,7 +426,7 @@ let REMOTE=false;   // true when this page has to reach a bridge on your machine
 let ENGINES=[];
 if(!SELF)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=LOCAL_BRIDGE+a.getAttribute('href'));
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
-const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],candidateName:"",mail:{configured:false}};
+const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],live:[],liveMeta:null,candidateName:"",mail:{configured:false},filters:{days:7,workSetup:""}};
 const $=id=>document.getElementById(id);
 
 /* ---------- init ---------- */
@@ -414,6 +434,12 @@ const csel=document.getElementById('country');
 COUNTRIES.forEach(c=>{const o=document.createElement('option');o.textContent=c;csel.appendChild(o);});
 csel.value=localStorage.getItem('country')||"United States";
 csel.onchange=()=>localStorage.setItem('country',csel.value);
+/* Search filters, remembered like the country. */
+const wsel=$('workSetup'), dsel=$('datePosted');
+wsel.value=localStorage.getItem('workSetup')||"";
+dsel.value=localStorage.getItem('datePosted')||"7";
+wsel.onchange=()=>localStorage.setItem('workSetup',wsel.value);
+dsel.onchange=()=>localStorage.setItem('datePosted',dsel.value);
 
 /* ---------- engine discovery ---------- */
 async function probe(base){
@@ -679,13 +705,15 @@ async function analyze(){
 
   const country=csel.value;
   const sen=document.getElementById('seniority').value;
+  const workSetup=wsel.value, days=Number(dsel.value)||0;
+  state.filters={days,workSetup};
   const R=state.resumeText;
 
   // Split into 3 parallel calls — the headless CLI is slow, so one giant call times out.
   const tasks=[
-    callJSON(buildAnalysisPrompt(R,country,sen)),
-    callJSON(buildJobsPrompt(R,country,sen,'early-stage startups and fast-growing scale-ups',10)),
-    callJSON(buildJobsPrompt(R,country,sen,'large multinational enterprises (MNCs), top global consulting firms, and specialist tech agencies',12))
+    callJSON(buildAnalysisPrompt(R,country,sen,workSetup)),
+    callJSON(buildJobsPrompt(R,country,sen,workSetup,'early-stage startups and fast-growing scale-ups',10)),
+    callJSON(buildJobsPrompt(R,country,sen,workSetup,'large multinational enterprises (MNCs), top global consulting firms, and specialist tech agencies',12))
   ];
 
   try{
@@ -700,6 +728,15 @@ async function analyze(){
 
     const analysis=aData.analysis||aData;
     const improvements=aData.resumeImprovements||(analysis&&analysis.resumeImprovements)||[];
+    /* The model names employers; it cannot know what is open today. Ask the bridge
+       for real postings from those companies' own careers feeds and the live job
+       boards, and put those first. */
+    setLoadingNote('Checking live job feeds for openings…');
+    const live=await findLiveJobs(analysis,jobs,country,workSetup,days);
+    state.live=live.jobs||[];
+    state.liveMeta=live.meta||null;
+    jobs=[...state.live.map(liveToJob), ...jobs];
+
     const parsed={analysis, resumeImprovements:improvements, opportunities:jobs};
     state.jobs=jobs;
     state.candidateName=(analysis&&analysis.candidateName)||"";
@@ -725,11 +762,20 @@ function dedupeJobs(arr){
 }
 
 const LOAD_MSGS=["Reading your resume like a recruiter…","Mapping your skills to market demand…","Scanning startups, scale-ups, MNCs & consulting firms…","Scoring each role against your profile…","Drafting your application strategy…"];
+/* Pin one message while a slow step runs, instead of letting the carousel spin. */
+function setLoadingNote(t){clearInterval(window._lc);const el=document.getElementById('loadingTxt');if(el)el.textContent=t;}
 function cycleLoading(){let i=0;clearInterval(window._lc);window._lc=setInterval(()=>{i=(i+1)%LOAD_MSGS.length;document.getElementById('loadingTxt').textContent=LOAD_MSGS[i];},2200);}
 
-function buildAnalysisPrompt(resume,country,sen){
+const WORK_SETUP_BRIEF={
+  remote:'The candidate is targeting REMOTE roles. Judge the resume as a remote hiring manager would: evidence of async written communication, self-direction, working across time zones, and delivering without supervision. Flag anything that reads as office-dependent.',
+  hybrid:'The candidate is targeting HYBRID roles. Weigh both in-office collaboration and independent delivery, and note whether the resume shows they can do both.',
+  onsite:'The candidate is targeting ON-SITE roles. Weigh local presence: work authorisation, relocation readiness, on-the-ground stakeholder and team experience.',
+};
+function buildAnalysisPrompt(resume,country,sen,workSetup){
   return `You are a top 1% tech recruiter for the ${country} hiring market. Analyze the candidate's resume below.
 ${sen!=='auto'?`The candidate is targeting roles at this level: ${sen}.`:''}
+${WORK_SETUP_BRIEF[workSetup]||''}
+${workSetup?`At least two of the resumeImprovements MUST be specific to landing ${workSetup} roles in ${country} — not generic advice.`:''}
 Also audit the resume against modern ATS (Workday, Greenhouse, Lever, Taleo): an overall score 0-100, plus six areas each scored 0-100 with a one-line note — "Keyword & role alignment", "Formatting & parseability", "Section structure", "Quantified impact", "Contact & links", "Skills coverage". Be a strict but fair ATS auditor.
 
 Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
@@ -739,9 +785,23 @@ Resume:
 """${resume.slice(0,12000)}"""`;
 }
 
-function buildJobsPrompt(resume,country,sen,segment,count){
-  return `You are a top 1% tech recruiter for the ${country} hiring market. Based on the candidate's resume below, list EXACTLY ${count} concrete, realistic job opportunities at REAL, well-known ${segment} that genuinely hire for this candidate's profile in ${country}.
+const WORK_SETUP_HINT={
+  remote:'The candidate wants REMOTE work. Only list employers that genuinely hire remotely for this kind of role (remote-first companies, or ones with an established distributed engineering team).',
+  hybrid:'The candidate wants HYBRID work. Only list employers with a real office presence in ${country} that run a hybrid schedule.',
+  onsite:'The candidate wants ON-SITE work. Only list employers with an actual office and on-site team in ${country}.',
+};
+function buildJobsPrompt(resume,country,sen,workSetup,segment,count){
+  return `You are a top 1% tech recruiter for the ${country} hiring market. Based on the candidate's resume below, list EXACTLY ${count} REAL, well-known ${segment} that are hiring for this candidate's profile in ${country} RIGHT NOW.
 ${sen!=='auto'?`Target this level: ${sen}.`:''}
+${(WORK_SETUP_HINT[workSetup]||'').replace('${country}',country)}
+
+ACCURACY RULES — these matter more than filling the list:
+- Name the COMPANY and the KIND OF ROLE it hires for. Do NOT describe a specific vacancy or requisition you remember: your knowledge has a cutoff and any particular posting is almost certainly closed by now. The app checks each company's live careers feed itself.
+- Only list employers that hire for this profile CONTINUOUSLY or very regularly, so the role is likely open again today.
+- Only list employers that actually operate in ${country} and hire there. Do not pad the list with famous names that have no presence in ${country}.
+- Leave out any company you believe has shut down, been fully absorbed after an acquisition, exited ${country}, or is in a publicly known hiring freeze or major layoff cycle.
+- Prefer fewer, better-grounded entries over reaching ${count}. It is fine to return fewer if you are not confident.
+- Set workSetup to the arrangement this company realistically offers for this role.
 Do NOT invent application URLs or recruiter emails — the app builds verified search links itself. Provide a careerDomain only when you are confident of the company's primary website domain.
 Mix categories honestly vs the resume: "high" (strong match, fit 78-97), "medium" (good with minor gaps, fit 60-79), "stretch" (aspirational, fit 40-62).
 
@@ -759,10 +819,42 @@ For EACH opportunity, decide the single most realistic channel THIS company acce
 Region guidance: for Gulf / Middle East markets (UAE, Saudi Arabia, Qatar, etc.) strongly prefer regional boards (bayt, naukrigulf, gulftalent) and agencies (tasc, hays) where that company actually recruits. For US / UK / Europe / global, prefer linkedin, indeed, glassdoor, or career_page. Use career_page for MNC/Consulting with a known domain; use email only for small agencies/boutiques. Pick the ONE channel where this specific company most realistically posts THIS role.
 
 Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
-{"opportunities":[{"company":"Real company","companyType":"Startup|Scale-up|MNC|Consulting|Agency","role":"specific title","location":"city, ${country} or Remote","category":"high|medium|stretch","fitScore":0,"careerDomain":"company.com or empty","applyMethod":"linkedin|indeed|glassdoor|bayt|naukrigulf|gulftalent|tasc|hays|career_page|email","applyEmail":"confident public jobs inbox or empty","matchReasons":["2-3"],"missingForRole":["0-2"],"pitch":"one punchy sentence"}]}
+{"opportunities":[{"company":"Real company","companyType":"Startup|Scale-up|MNC|Consulting|Agency","role":"specific title","location":"city, ${country} or Remote","workSetup":"remote|hybrid|onsite","category":"high|medium|stretch","fitScore":0,"careerDomain":"company.com or empty","applyMethod":"linkedin|indeed|glassdoor|bayt|naukrigulf|gulftalent|tasc|hays|career_page|email","applyEmail":"confident public jobs inbox or empty","matchReasons":["2-3"],"missingForRole":["0-2"],"pitch":"one punchy sentence"}]}
 
 Resume:
 """${resume.slice(0,12000)}"""`;
+}
+
+/* ---------- live openings ---------- */
+/* Everything here comes back from a public feed with its own publication date and a
+   link to that exact posting. A failure is never fatal: the page falls back to the
+   model's shortlist with date-filtered search links. */
+async function findLiveJobs(analysis,jobs,country,workSetup,days){
+  const roles=[...new Set([...(analysis.targetRoles||[]),...jobs.map(j=>j.role||'')])].filter(Boolean).slice(0,8);
+  const companies=[...new Set(jobs.map(j=>j.company||'').filter(Boolean))].slice(0,20);
+  if(!roles.length)return {jobs:[],meta:null};
+  try{
+    const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:60});
+    return {jobs:r.jobs||[],meta:{sources:r.sources||[],checked:r.checked||0,scanned:r.scanned||0}};
+  }catch(e){
+    return {jobs:[],meta:{error:e.message}};
+  }
+}
+/* A live posting is reshaped into the same object the cards and the email flow use,
+   so one code path serves both kinds of result. */
+function liveToJob(p){
+  return {company:p.company,role:p.title,location:p.location||'',companyType:'',
+    category:'live',fitScore:0,careerDomain:'',applyMethod:'live',applyEmail:'',
+    matchReasons:[],missingForRole:[],pitch:'',
+    _live:true,_url:p.url,_postedAt:p.postedAt,_source:p.sourceLabel||p.source,_workplace:p.workplace||''};
+}
+function timeAgo(iso){
+  const t=Date.parse(iso); if(!t)return '';
+  const mins=Math.max(1,Math.round((Date.now()-t)/60000));
+  if(mins<60)return mins+'m ago';
+  const h=Math.round(mins/60); if(h<24)return h+'h ago';
+  const d=Math.round(h/24); if(d<30)return d+(d===1?' day ago':' days ago');
+  return Math.round(d/30)+' mo ago';
 }
 
 /* ---------- the AI call (whichever engine is picked in ⚙) ---------- */
@@ -900,11 +992,14 @@ function renderResults(d){
   }
 
   // filters
-  html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill">${(d.opportunities||[]).length} roles</span></div>
+  const liveN=(d.opportunities||[]).filter(o=>o._live).length;
+  html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill">${liveN} live · ${(d.opportunities||[]).length-liveN} suggested</span></div>
+  ${liveSummaryHTML(liveN)}
   <div class="filters">
     <input class="grow" type="text" id="search" placeholder="🔍 Filter by company or role…" oninput="renderJobs()" />
     <select id="fcat" onchange="renderJobs()">
-      <option value="">All probabilities</option>
+      <option value="">All results</option>
+      <option value="live">✅ Live openings only</option>
       <option value="high">High-probability</option>
       <option value="medium">Medium-probability</option>
       <option value="stretch">Stretch</option>
@@ -926,7 +1021,57 @@ function renderResults(d){
   r.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-const CATLABEL={high:'🟢 High-probability',medium:'🟡 Medium-probability',stretch:'🔵 Stretch'};
+/* Says plainly what was and was not verified, including when nothing was. */
+function liveSummaryHTML(liveN){
+  const m=state.liveMeta;
+  const scope=`${daysLabel()}${state.filters.workSetup?', '+WS_LABEL[state.filters.workSetup]:''}, ${esc(state.country)}`;
+  if(!m||m.error){
+    return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">⚠️ Couldn't reach the live job feeds${m&&m.error?' ('+esc(m.error)+')':''}. Everything below is the recruiter's shortlist — the links open a search filtered to the ${daysLabel()}.</div>`;
+  }
+  if(!liveN){
+    return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">
+      🔍 No <b>verified</b> opening matched ${esc(scope)} — ${m.checked} shortlisted companies and ${m.scanned} live postings were checked.
+      Coverage is strongest for remote roles and for companies using Greenhouse, Lever or Ashby; on-site roles in markets served mainly by regional boards often will not appear here.
+      Everything below is the recruiter's shortlist, with every link filtered to the ${daysLabel()}. Widening <b>Posted within</b> usually helps.
+    </div>`;
+  }
+  return `<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px">
+    ✅ <b>${liveN}</b> verified opening${liveN===1?'':'s'} — real postings with the date and link their source published, matching ${esc(scope)}.
+    Checked against ${m.checked} shortlisted companies' careers feeds and ${m.scanned} live board postings.
+  </div>`;
+}
+
+const CATLABEL={live:'✅ Live openings',high:'🟢 High-probability',medium:'🟡 Medium-probability',stretch:'🔵 Stretch'};
+const WS_LABEL={'':'Any setup',remote:'Remote',hybrid:'Hybrid',onsite:'On-site'};
+const DAYS_LABEL={1:'past 24 hours',3:'past 3 days',7:'past week',14:'past 2 weeks',30:'past month',0:'any time'};
+function daysLabel(){return DAYS_LABEL[state.filters.days]||('past '+state.filters.days+' days');}
+
+/* ---------- search-link filters ----------
+   Each board expresses "recently posted" differently. These are the parameters the
+   boards document; where a board has none, the filter is carried by the keyword or,
+   for a Google-scoped search, by tbs=qdr. */
+function liFilter(){                       // LinkedIn
+  const {days,workSetup}=state.filters;
+  const wt={onsite:'1',remote:'2',hybrid:'3'}[workSetup];
+  return (days>0?'&f_TPR=r'+(days*86400):'')+(wt?'&f_WT='+wt:'')+'&sortBy=DD';
+}
+function indeedFilter(){                   // Indeed
+  const d=state.filters.days;
+  return (d>0?'&fromage='+Math.min(d,30):'')+'&sort=date';
+}
+function gdFilter(){                       // Glassdoor
+  const d=state.filters.days;
+  return d>0?'&fromAge='+Math.min(d,30):'';
+}
+/* Google only exposes day / week / month reliably, so a 3-day or 2-week filter is
+   widened to the nearest range it supports rather than silently dropped. */
+function googleFilter(){
+  const d=state.filters.days;
+  if(!d)return '';
+  return '&tbs=qdr:'+(d<=1?'d':d<=7?'w':'m');
+}
+/* Boards without a work-setup parameter get the word in the query instead. */
+function wsWord(){return state.filters.workSetup?' '+state.filters.workSetup:'';}
 function renderJobs(){
   const q=(document.getElementById('search').value||'').toLowerCase();
   const fc=document.getElementById('fcat').value, ft=document.getElementById('ftype').value, fs=document.getElementById('fsort').value;
@@ -944,18 +1089,24 @@ function renderJobs(){
 
   if(fc||ft||q){ // flat grid when filtering
     wrap.innerHTML=`<div class="jobs">${list.map(cardHTML).join('')}</div>`;
-  }else{ // grouped by category
+  }else{ // grouped by category, verified openings first
     let h='';
-    ['high','medium','stretch'].forEach(cat=>{
+    ['live','high','medium','stretch'].forEach(cat=>{
       const g=list.filter(j=>j.category===cat);
       if(!g.length)return;
-      h+=`<div style="margin:6px 0 12px;font-weight:700;color:var(--mut);font-size:14px">${CATLABEL[cat]} · ${g.length}</div><div class="jobs" style="margin-bottom:22px">${g.map(cardHTML).join('')}</div>`;
+      const sub=cat==='live'
+        ? `posted in the ${daysLabel()}${state.filters.workSetup?' · '+WS_LABEL[state.filters.workSetup]:''} — checked just now against public job feeds`
+        : 'companies that hire this profile; the links open a search filtered to your dates';
+      h+=`<div style="margin:6px 0 4px;font-weight:700;color:var(--mut);font-size:14px">${CATLABEL[cat]} · ${g.length}</div>
+          <div style="margin:0 0 12px;color:var(--mut);font-size:12px">${esc(sub)}</div>
+          <div class="jobs" style="margin-bottom:22px">${g.map(cardHTML).join('')}</div>`;
     });
     wrap.innerHTML=h;
   }
 }
 
 function cardHTML(j){
+  if(j._live)return liveCardHTML(j);
   const sc=j.fitScore||0, col=scoreColor(sc);
   const reasons=(j.matchReasons||[]).map(r=>`<div><span class="tick">✓</span><span>${esc(r)}</span></div>`).join('');
   const miss=(j.missingForRole||[]).length?`<div class="miss">📌 To strengthen: ${(j.missingForRole||[]).map(esc).join(', ')}</div>`:'';
@@ -974,7 +1125,7 @@ function cardHTML(j){
     </div>
     <div class="reasons">${reasons}</div>
     ${miss}
-    <div class="applyvia"><span class="via-dot">${badge.icon}</span> Apply via <b>${badge.label}</b></div>
+    <div class="applyvia"><span class="via-dot">🔍</span> Suggested — not a verified opening. <b>Apply via ${badge.label}</b>, filtered to the ${daysLabel()}.</div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
       <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
@@ -985,24 +1136,53 @@ function cardHTML(j){
   </div>`;
 }
 
+/* A verified opening: the date and the link are the source's own, so the card shows
+   them plainly instead of a fit score the recruiter model never gave it. */
+function liveCardHTML(j){
+  const ago=timeAgo(j._postedAt);
+  const ws=j._workplace?`<span class="chip">${esc(WS_LABEL[j._workplace]||j._workplace)}</span>`:'';
+  return `<div class="job">
+    <div class="top">
+      <div>
+        <h3>${esc(j.role)}</h3>
+        <div class="co">${esc(j.company)} · ${esc(j.location||'—')}</div>
+      </div>
+      <div class="chips" style="justify-content:flex-end;max-width:150px">
+        <span class="chip good">${esc(ago||'live')}</span>${ws}
+      </div>
+    </div>
+    <div class="applyvia"><span class="via-dot">✅</span> Open now on <b>${esc(j._source||'a live feed')}</b> — posted ${esc(ago||'recently')}</div>
+    <div class="sublinks">
+      <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in Similar on LinkedIn</a>
+      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers ↗</a>`:''}
+    </div>
+    <div class="actions">
+      <a class="btn apply" href="${j._url}" target="_blank" rel="noopener">↗ Open this posting</a>
+      <button class="btn mail" id="mail-${j._i}" onclick="openEmailDraft(${j._i})">✉️ Apply by Email</button>
+    </div>
+  </div>`;
+}
+
 /* ---------- apply-channel registry (real, live search/apply links per platform) ---------- */
 function kw(j){return ((j.role||'')+' '+(j.company||'')).trim();}
 // Google search scoped to a board/agency domain — robust when a board's own query
 // params aren't stable; always lands the user on relevant, real listings.
-function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+state.country)}`;}
+function siteSearch(domain,j){return `https://www.google.com/search?q=${enc('site:'+domain+' '+kw(j)+' '+state.country+wsWord())}`+googleFilter();}
 function slug(s){return (s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 
 const PLATFORMS={
   linkedin:   {icon:'🔗',label:'LinkedIn Easy Apply', cta:'Easy Apply on LinkedIn', url:linkedinEasyApplyURL},
-  indeed:     {icon:'🟦',label:'Indeed',              cta:'Apply on Indeed',        url:j=>`https://www.indeed.com/jobs?q=${enc(kw(j))}&l=${enc(state.country)}`},
-  glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Apply on Glassdoor',     url:j=>`https://www.glassdoor.com/Search/results.htm?keyword=${enc(kw(j))}`},
+  indeed:     {icon:'🟦',label:'Indeed',              cta:'Apply on Indeed',        url:indeedURL},
+  glassdoor:  {icon:'🟢',label:'Glassdoor',           cta:'Apply on Glassdoor',     url:glassdoorURL},
   bayt:       {icon:'🟧',label:'Bayt',                cta:'Apply on Bayt',          url:j=>`https://www.bayt.com/en/jobs/q/${enc(slug(j.role))}/`},
   naukrigulf: {icon:'🟪',label:'NaukriGulf',          cta:'Apply on NaukriGulf',    url:j=>`https://www.naukrigulf.com/jobs-search-results?keyword=${enc(kw(j))}`},
   gulftalent: {icon:'🟦',label:'GulfTalent',          cta:'Apply on GulfTalent',    url:j=>siteSearch('gulftalent.com',j)},
   tasc:       {icon:'🏢',label:'TASC Outsourcing',    cta:'Apply via TASC',         url:j=>siteSearch('tascoutsourcing.com',j)},
   hays:       {icon:'🏢',label:'Hays',                cta:'Apply via Hays',         url:j=>siteSearch('hays.com',j)},
   career_page:{icon:'🏢',label:'Company career page', cta:'Apply on career page',   url:careerURL},
-  email:      {icon:'✉️',label:'Email application',    cta:'Apply by Email',         url:null}
+  email:      {icon:'✉️',label:'Email application',    cta:'Apply by Email',         url:null},
+  // A live posting already has its own URL — no search needed.
+  live:       {icon:'✅',label:'Live posting',        cta:'Open this posting',      url:j=>j._url}
 };
 // Normalize model variants/typos onto known platform keys.
 const METHOD_ALIASES={'indeed plus':'indeed','indeedplus':'indeed','linked in':'linkedin','naukri':'naukrigulf','naukri gulf':'naukrigulf','gulf talent':'gulftalent','careerpage':'career_page','career':'career_page','company':'career_page','website':'career_page','mail':'email'};
@@ -1031,14 +1211,15 @@ function applyActions(j,m){
 
 /* ---------- link builders (real, live searches) ---------- */
 function enc(s){return encodeURIComponent(s||'');}
-function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+state.country+' careers apply job')}`;}
-function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}`;}
-// LinkedIn jobs search pre-filtered to Easy Apply roles (f_AL=true).
-function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}&f_AL=true`;}
+function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+state.country+wsWord()+' careers apply job')}`+googleFilter();}
+function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}`+liFilter();}
+// LinkedIn jobs search pre-filtered to Easy Apply roles (f_AL=true), plus the
+// date-posted and workplace filters chosen on the page.
+function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(state.country)}&f_AL=true`+liFilter();}
 // Company careers/jobs page when we have a confident domain, else a Google careers search.
 function careerURL(j){return j.careerDomain?`https://${(j.careerDomain||'').replace(/^https?:\/\//,'').replace(/\/+$/,'')}/careers`:applyURL(j);}
-function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||''))}&l=${enc(state.country)}`;}
-function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||''))}`;}
+function indeedURL(j){return `https://www.indeed.com/jobs?q=${enc((j.role||'')+' '+(j.company||'')+wsWord())}&l=${enc(state.country)}`+indeedFilter();}
+function glassdoorURL(j){return `https://www.glassdoor.com/Search/results.htm?keyword=${enc((j.role||'')+' '+(j.company||'')+wsWord())}`+gdFilter();}
 
 /* ---------- email apply: generate → review → send ---------- */
 function buildSignature(){

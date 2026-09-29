@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const engines = require('./engines');
+const jobfeeds = require('./jobfeeds');
 
 const PORT = Number(process.env.PORT) || 8787;
 const HERE = __dirname;
@@ -230,7 +231,7 @@ function logResponse(model, prompt, text) {
 
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
-  '/api/engine-config', '/api/engine-connect', '/api/engine-forget']);
+  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/jobs']);
 // A hosted deployment may hold the owner's API key, so its AI endpoint must not be
 // callable from other websites. The local bridge deliberately stays open: that is how
 // a page hosted elsewhere reaches the agent on your machine.
@@ -322,6 +323,22 @@ async function handle(req, res) {
       const out = await engines.run(prompt, engine, model, pics, creds);
       logResponse(out.engine + '/' + (out.model || 'default'), prompt, out.text);
       return sendJSON(res, 200, { text: out.text, engine: out.engine, model: out.model });
+    }
+
+    // Live openings: real postings, with the date and link the source published.
+    // The model's shortlist is only used to decide whose careers feed to read.
+    if (req.method === 'POST' && url === '/api/jobs') {
+      const b = await readJSON(req, 1e5);
+      const out = await jobfeeds.search({
+        roles: Array.isArray(b.roles) ? b.roles.slice(0, 8) : [],
+        companies: Array.isArray(b.companies) ? b.companies.slice(0, 20) : [],
+        country: String(b.country || ''),
+        workSetup: ['remote', 'hybrid', 'onsite'].includes(b.workSetup) ? b.workSetup : '',
+        days: Number.isFinite(+b.days) ? Math.max(0, Math.min(90, +b.days)) : 7,
+        limit: Math.min(80, Number(b.limit) || 60),
+      });
+      console.log('  live jobs: ' + out.jobs.length + ' kept from ' + out.scanned + ' scanned');
+      return sendJSON(res, 200, out);
     }
 
     if (req.method === 'POST' && url === '/api/fetch-url') {

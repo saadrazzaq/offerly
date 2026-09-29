@@ -4,7 +4,8 @@ Offerly is a single-page AI job-search copilot. Upload your resume, pick a targe
 
 - **Deep resume analysis** — seniority, experience, strengths, and market-specific gaps
 - **ATS compatibility score** /100 with a six-area breakdown and quick fixes
-- **20+ real-company opportunities** (startups, scale-ups, MNCs, consulting, agencies) split into **High / Medium / Stretch** with a **fit score** per role
+- **Verified live openings** — real postings pulled from public job feeds, each with the date its source published it and a link straight to that posting. Filter by **posted within** (24 hours → a month) and **work setup** (remote / hybrid / on-site), the way you would on LinkedIn.
+- **Plus a recruiter shortlist** of real companies that hire this profile, split into **High / Medium / Stretch** with a **fit score** — every link pre-filtered to the dates and work setup you chose
 - **Channel-aware Apply** — for each role the recruiter picks the most realistic application route and the button matches it: LinkedIn Easy Apply, Indeed, Glassdoor, Bayt, NaukriGulf, GulfTalent, TASC, Hays, the company career page, or email — with a regional bias (Gulf boards for Gulf markets, LinkedIn/Indeed for global)
 - **Apply by Email** — generates a cover letter *tailored to that exact role* and opens Gmail compose pre-filled (recipient + subject + letter + your signature). Drag in your resume and send.
 - **Resume improvement suggestions** — prioritized and actionable
@@ -59,6 +60,35 @@ OFFERLY_TIMEOUT_MS=360000 node bridge.js               # give a slow local model
 Every CLI engine receives its prompt on **stdin**, because a resume plus a job post is far longer than a Windows command line allows. If your CLI version wants different flags, set `OFFERLY_<ENGINE>_ARGS` rather than editing `engines.js`.
 
 Only **Ollama** and a custom command cannot read screenshots; for those, paste the job text instead.
+
+## Where the jobs come from
+
+Two different things, kept clearly apart on the page, because they are not equally trustworthy.
+
+**✅ Live openings** are fetched while you wait, from public feeds that publish a date and a permanent link:
+
+| Source | Covers |
+|--------|--------|
+| Remotive, Jobicy, RemoteOK | remote roles across the whole market |
+| Arbeitnow | remote and on-site, strongest in Europe |
+| Greenhouse, Lever, Ashby | each shortlisted company's own careers feed — how on-site roles are found |
+
+A posting is only shown if it carries a publication date inside your window, its title matches one of your target roles on a distinctive word, its stated location is in your country, and its work setup matches. Postings with no location or no stated arrangement are dropped rather than guessed at, and every link is checked before the page shows it, so a vacancy the employer has already pulled does not reach you.
+
+**Honest limits.** Coverage is excellent for remote roles and for companies on Greenhouse, Lever or Ashby. It is thin for on-site roles in markets served mainly by regional boards — Bayt, GulfTalent and NaukriGulf publish no open API, and LinkedIn and Indeed do not allow this kind of access. When nothing is verified the page says so, tells you how many companies and postings it checked, and falls back to the shortlist.
+
+**🔍 Suggestions** are the recruiter model's judgement about which companies hire your profile. The model is asked for *employers*, never for a specific vacancy — anything it remembers about a particular posting is as old as its training data, which is what made earlier results look stale. Each suggestion links to a search already filtered to your choices:
+
+| Board | Date filter | Work setup |
+|-------|-------------|------------|
+| LinkedIn | `f_TPR` + `sortBy=DD` | `f_WT` (on-site / remote / hybrid) |
+| Indeed | `fromage` + `sort=date` | in the query |
+| Glassdoor | `fromAge` | in the query |
+| Bayt, GulfTalent, TASC, Hays | `tbs=qdr` on a site-scoped search | in the query |
+
+Google only exposes day, week and month reliably, so a 3-day or 2-week filter is widened to the nearest range it supports rather than quietly dropped.
+
+Your **work setup** choice also reaches the resume analysis: pick Remote and the improvements cover async written communication, self-direction and time-zone overlap; pick On-site and they cover work authorisation, relocation and local presence.
 
 ## How it works
 
@@ -161,6 +191,7 @@ Serverless limits worth knowing:
 
 ## Notes & honest limits
 
+- **A "live opening" really is one.** It came from a feed, with that feed's own date and link, and the link was checked before you saw it. A "suggestion" is explicitly labelled as one and links to a filtered search, not to a vacancy.
 - **Job links are live searches, not fabricated URLs.** Apply buttons open real, current postings — nothing is invented. **Recruiter emails are never guessed** — "Apply by Email" drafts the cover letter and opens Gmail with the **recipient left blank**, because `careers@<domain>`-style guesses bounce for most companies. Find the real application address on the company's careers page (the "Careers ↗" link) and paste it in.
 - **Gmail can't auto-attach files** from the job finder's "Apply by Email" (browser security). The compose window opens pre-filled; you drag your resume in and send. Bulk apply sends through SMTP instead, so it attaches the resume for you.
 - Through a local agent CLI a full analysis takes ~1.5–2.5 minutes; a direct API engine is faster but billed per token.
@@ -174,6 +205,7 @@ Serverless limits worth knowing:
 | `apply.html` | Bulk apply — generate, review and send application emails |
 | `app.js` | Every route: AI calls, job-page fetching, email — shared by the bridge and Vercel |
 | `engines.js` | Engine registry: what each agent needs, how to find it, how to call it |
+| `jobfeeds.js` | Live job feeds: the public sources, the filters, and the link check |
 | `bridge.js` | Local server on `localhost:8787` |
 | `api/` | Vercel functions — thin wrappers around `app.js` |
 | `vercel.json` | Deployment config (routing, function limits) |
