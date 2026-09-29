@@ -300,6 +300,15 @@
     <h3>AI engine</h3>
     <p class="sub">Offerly runs on whichever AI agent you already have — Claude Code, Gemini CLI, OpenAI Codex, Cursor, a local Ollama model, or your own API key.</p>
     <div class="field">
+      <label class="lab" for="provider">AI provider</label>
+      <select id="provider"></select>
+    </div>
+    <div class="field" id="authModeField">
+      <label class="lab">How to connect</label>
+      <div class="presets" id="authMode"></div>
+      <p class="note" id="authNote"></p>
+    </div>
+    <div class="field" style="display:none">
       <label class="lab" for="engine">Engine</label>
       <select id="engine"></select>
       <p class="note" id="engineNote"></p>
@@ -518,14 +527,11 @@ function renderEngines(list,def,canSave){
   sel.innerHTML='';
   ENGINES.forEach(e=>{
     const o=document.createElement('option');
-    o.value=e.id;
-    o.textContent=e.label+(e.available?'':(localCreds(e.id)?' — key in this browser':' — not connected'));
-    sel.appendChild(o);   /* selectable even when unconnected, so you can set it up */
+    o.value=e.id;o.textContent=e.label;
+    sel.appendChild(o);
   });
   const pick=(saved&&ENGINES.some(e=>e.id===saved))?saved:(def||(ENGINES.find(e=>!e.blocked)||{}).id);
-  if(pick)sel.value=pick;
-  sel.onchange=()=>renderEngineDetail(sel.value);
-  renderEngineDetail(sel.value);
+  renderProviders(pick);
 }
 
 /* Fields are declared by the engine, so a new provider needs no UI work. */
@@ -688,6 +694,72 @@ async function refreshAuth(id){
     }
   }catch(_){/* the picker still works without this */}
 }
+/* ⚙ Engine offers a provider, then the ways that provider can be connected:
+   sign in with your own account, or paste an API key. Both end up selecting one of
+   the engines the backend reported, so everything downstream is unchanged. */
+function providerList(){
+  const out=[];
+  ENGINES.forEach(e=>{
+    let g=out.find(x=>x.id===e.provider);
+    if(!g){g={id:e.provider,label:e.providerLabel||e.provider,options:[]};out.push(g);}
+    g.options.push(e);
+  });
+  return out;
+}
+function renderProviders(preferId){
+  const psel=$('provider');
+  if(!psel||!ENGINES.length)return;
+  const groups=providerList();
+  const fromEngine=preferId&&(ENGINES.find(e=>e.id===preferId)||{}).provider;
+  const saved=localStorage.getItem('provider');
+  psel.innerHTML='';
+  groups.forEach(g=>{
+    const o=document.createElement('option');
+    o.value=g.id;
+    const ready=g.options.some(e=>e.available||localCreds(e.id));
+    o.textContent=g.label+(ready?' ✓':'');
+    psel.appendChild(o);
+  });
+  const pick=fromEngine||(groups.some(g=>g.id===saved)?saved:null)
+    ||(groups.find(g=>g.options.some(e=>e.available))||groups[0]||{}).id;
+  if(pick)psel.value=pick;
+  psel.onchange=()=>{localStorage.setItem('provider',psel.value);renderAuthModes();};
+  renderAuthModes(preferId);
+}
+function renderAuthModes(preferId){
+  const psel=$('provider'), box=$('authMode'), note=$('authNote');
+  if(!psel||!box)return;
+  const g=providerList().find(x=>x.id===psel.value);
+  if(!g)return;
+  const savedMode=localStorage.getItem('authMode.'+g.id);
+  let chosen=(preferId&&g.options.find(e=>e.id===preferId))
+    ||g.options.find(e=>e.auth===savedMode&&(e.available||localCreds(e.id)))
+    ||g.options.find(e=>e.available||localCreds(e.id))
+    ||g.options.find(e=>e.auth===savedMode)
+    ||g.options[0];
+  box.innerHTML='';
+  g.options.forEach(e=>{
+    const b=document.createElement('button');
+    b.type='button';b.className='btn'+(e.id===chosen.id?' send':'');
+    const ready=e.available||localCreds(e.id);
+    b.textContent=(e.auth==='sso'?'🔐 ':e.auth==='key'?'🔑 ':'')+(e.authLabel||e.label)+(ready?' ✓':'');
+    b.onclick=()=>{localStorage.setItem('authMode.'+g.id,e.auth);selectEngine(e.id);};
+    box.appendChild(b);
+  });
+  if(note)note.textContent=chosen.authNote||'';
+  selectEngine(chosen.id,true);
+}
+/* Drives the hidden engine select the rest of the panel already reads. */
+function selectEngine(id,quiet){
+  const sel=$('engine');
+  if(!sel)return;
+  if(![...sel.options].some(o=>o.value===id)){
+    const o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);
+  }
+  sel.value=id;
+  if(!quiet)renderAuthModes(id);
+  else renderEngineDetail(id);
+}
 function listJoin(a){return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
 function escapeHTMLish(t){const d=document.createElement('div');d.textContent=String(t);return d.innerHTML;}
 checkBridge();
@@ -837,7 +909,7 @@ ${workSetup?`At least two of the resumeImprovements MUST be specific to landing 
 Also audit the resume against modern ATS (Workday, Greenhouse, Lever, Taleo): an overall score 0-100, plus six areas each scored 0-100 with a one-line note — "Keyword & role alignment", "Formatting & parseability", "Section structure", "Quantified impact", "Contact & links", "Skills coverage". Be a strict but fair ATS auditor.
 
 Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
-{"analysis":{"candidateName":"string or empty","candidateEmail":"from resume or empty","candidatePhone":"from resume or empty","candidateLinkedIn":"full LinkedIn URL from resume or empty","seniority":"string","yearsExperience":"e.g. '4 yrs'","summary":"2-3 sentence recruiter view","topSkills":["..."],"strengths":["3-5"],"gaps":["2-4 gaps for ${country}"],"targetRoles":["4-7 best-fit job titles"],"ats":{"score":0,"verdict":"one short line","breakdown":[{"area":"Keyword & role alignment","score":0,"note":"..."},{"area":"Formatting & parseability","score":0,"note":"..."},{"area":"Section structure","score":0,"note":"..."},{"area":"Quantified impact","score":0,"note":"..."},{"area":"Contact & links","score":0,"note":"..."},{"area":"Skills coverage","score":0,"note":"..."}],"quickFixes":["3-5 specific ATS fixes"]}},"resumeImprovements":[{"priority":"high|medium|low","title":"short","detail":"specific, actionable"}]}
+{"analysis":{"candidateName":"string or empty","candidateEmail":"from resume or empty","candidatePhone":"from resume or empty","candidateLinkedIn":"full LinkedIn URL from resume or empty","seniority":"string","yearsExperience":"e.g. '4 yrs'","summary":"2-3 sentence recruiter view","topSkills":["..."],"strengths":["3-5"],"gaps":["2-4 gaps for ${country}"],"targetRoles":["3-6 job titles EXACTLY as job boards write them, best fit first — e.g. 'Senior Backend Engineer', 'Data Engineer'. Real, searchable titles only: no company jargon, no slashes, no 'or', no seniority ranges, no invented hybrids. Include the seniority word only when it genuinely fits this candidate."],"ats":{"score":0,"verdict":"one short line","breakdown":[{"area":"Keyword & role alignment","score":0,"note":"..."},{"area":"Formatting & parseability","score":0,"note":"..."},{"area":"Section structure","score":0,"note":"..."},{"area":"Quantified impact","score":0,"note":"..."},{"area":"Contact & links","score":0,"note":"..."},{"area":"Skills coverage","score":0,"note":"..."}],"quickFixes":["3-5 specific ATS fixes"]}},"resumeImprovements":[{"priority":"high|medium|low","title":"short","detail":"specific, actionable"}]}
 
 Resume:
 """${resume.slice(0,12000)}"""`;
@@ -887,12 +959,30 @@ Resume:
 /* Everything here comes back from a public feed with its own publication date and a
    link to that exact posting. A failure is never fatal: the page falls back to the
    model's shortlist with date-filtered search links. */
+/* The target titles drive the search, so they come first: what the recruiter model
+   read off the resume, then the roles it matched, de-duplicated. */
+const STAGE_LEVEL={'Fresh / Entry-level':1,'Fresh → Senior':2,'Senior → Lead':3,
+  'Lead → Architect':4,'Architect → Manager':5,'Manager → Director / Head':6};
+function candidateLevel(analysis){
+  const stage=document.getElementById('seniority').value;
+  if(STAGE_LEVEL[stage]!==undefined)return STAGE_LEVEL[stage];
+  const t=String(analysis.seniority||'').toLowerCase();
+  if(/intern|graduate|trainee/.test(t))return 0;
+  if(/junior|entry/.test(t))return 1;
+  if(/director|vp|chief|head of/.test(t))return 6;
+  if(/manager/.test(t))return 5;
+  if(/staff|principal|lead|architect/.test(t))return 4;
+  if(/senior/.test(t))return 3;
+  return 2;
+}
 async function findLiveJobs(analysis,jobs,country,workSetup,days){
   const roles=[...new Set([...(analysis.targetRoles||[]),...jobs.map(j=>j.role||'')])].filter(Boolean).slice(0,8);
   const companies=[...new Set(jobs.map(j=>j.company||'').filter(Boolean))].slice(0,20);
+  const skills=[...new Set([...(analysis.topSkills||[]),...(analysis.strengths||[])])].filter(Boolean).slice(0,25);
   if(!roles.length)return {jobs:[],meta:null};
   try{
-    const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:60});
+    const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:60,
+      skills,level:candidateLevel(analysis)});
     return {jobs:r.jobs||[],meta:{sources:r.sources||[],checked:r.checked||0,scanned:r.scanned||0}};
   }catch(e){
     return {jobs:[],meta:{error:e.message}};

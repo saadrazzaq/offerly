@@ -360,6 +360,8 @@ async function handle(req, res) {
         workSetup: ['remote', 'hybrid', 'onsite'].includes(b.workSetup) ? b.workSetup : '',
         days: Number.isFinite(+b.days) ? Math.max(0, Math.min(90, +b.days)) : 7,
         limit: Math.min(80, Number(b.limit) || 60),
+        skills: Array.isArray(b.skills) ? b.skills.slice(0, 25) : [],
+        level: Number.isFinite(+b.level) ? Math.max(0, Math.min(6, +b.level)) : undefined,
       });
       console.log('  live jobs: ' + out.jobs.length + ' kept from ' + out.scanned + ' scanned');
       return sendJSON(res, 200, out);

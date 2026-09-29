@@ -55,6 +55,8 @@ function iso(v) {
   return isNaN(d) ? '' : d.toISOString();
 }
 
+// `desc` is the posting's own wording, used to check the resume's skills against
+// the job description. It is stripped before anything is sent to the page.
 function posting(o) {
   return {
     title: String(o.title || '').trim(),
@@ -65,6 +67,7 @@ function posting(o) {
     workplace: o.workplace || '',
     source: o.source,
     sourceLabel: o.sourceLabel,
+    desc: String(o.desc || '').replace(/<[^>]+>/g, ' ').slice(0, 4000),
   };
 }
 
@@ -76,7 +79,7 @@ const BOARDS = [
       const j = await getJSON('https://remotive.com/api/remote-jobs?limit=60&search=' + encodeURIComponent(q));
       return (j.jobs || []).map(x => posting({
         title: x.title, company: x.company_name, url: x.url,
-        postedAt: x.publication_date, location: x.candidate_required_location,
+        postedAt: x.publication_date, location: x.candidate_required_location, desc: x.description,
         workplace: 'remote', source: 'remotive', sourceLabel: 'Remotive',
       }));
     },
@@ -87,7 +90,7 @@ const BOARDS = [
       const j = await getJSON('https://jobicy.com/api/v2/remote-jobs?count=50&tag=' + encodeURIComponent(q));
       return (j.jobs || []).map(x => posting({
         title: x.jobTitle, company: x.companyName, url: x.url,
-        postedAt: x.pubDate, location: x.jobGeo,
+        postedAt: x.pubDate, location: x.jobGeo, desc: x.jobExcerpt || x.jobDescription,
         workplace: 'remote', source: 'jobicy', sourceLabel: 'Jobicy',
       }));
     },
@@ -99,7 +102,7 @@ const BOARDS = [
       // The first element is RemoteOK's licence notice, not a job.
       return (Array.isArray(j) ? j : []).filter(x => x && x.position).map(x => posting({
         title: x.position, company: x.company, url: x.url || ('https://remoteok.com/l/' + x.id),
-        postedAt: x.epoch || x.date, location: x.location,
+        postedAt: x.epoch || x.date, location: x.location, desc: x.description,
         workplace: 'remote', source: 'remoteok', sourceLabel: 'RemoteOK',
       }));
     },
@@ -111,7 +114,7 @@ const BOARDS = [
       return (j.data || []).map(x => posting({
         title: x.title, company: x.company_name,
         url: arbeitnowUrl(x),
-        postedAt: x.created_at, location: x.location,
+        postedAt: x.created_at, location: x.location, desc: x.description,
         workplace: workplaceOf({ location: x.location, title: x.title, remoteFlag: x.remote }),
         source: 'arbeitnow', sourceLabel: 'Arbeitnow',
       }));
@@ -150,7 +153,7 @@ const ATS = [
     url: t => `https://api.lever.co/v0/postings/${t}?mode=json`,
     parse: (j, company) => (Array.isArray(j) ? j : []).map(x => posting({
       title: x.text, company, url: x.hostedUrl,
-      postedAt: x.createdAt,
+      postedAt: x.createdAt, desc: x.descriptionPlain,
       location: x.categories && x.categories.location,
       workplace: workplaceOf({
         explicit: x.workplaceType,
@@ -164,7 +167,7 @@ const ATS = [
     url: t => `https://api.ashbyhq.com/posting-api/job-board/${t}`,
     parse: (j, company) => (j.jobs || []).filter(x => x.isListed !== false).map(x => posting({
       title: x.title, company, url: x.jobUrl || x.applyUrl,
-      postedAt: x.publishedAt, location: x.location,
+      postedAt: x.publishedAt, location: x.location, desc: x.descriptionPlain,
       workplace: workplaceOf({ explicit: x.workplaceType, location: x.location, title: x.title, remoteFlag: x.isRemote }),
       source: 'ashby', sourceLabel: 'Ashby',
     })),
@@ -198,37 +201,122 @@ async function probeCompany(company, budget) {
 }
 
 // --- relevance --------------------------------------------------------------
-const STOP = new Set(['and', 'the', 'of', 'for', 'a', 'an', 'to', 'in', 'at', 'with', 'senior',
-  'junior', 'lead', 'staff', 'principal', 'mid', 'level', 'i', 'ii', 'iii', 'jr', 'sr']);
+// Matching used to pool every target role into one bag of words, so a single word
+// was enough to let a posting in: "Data Engineer" in the list meant "Data Entry
+// Clerk" matched on "data". Each role is now matched as a phrase, on its own.
 
-function terms(roles) {
-  const out = new Set();
-  for (const r of roles || []) {
-    for (const w of String(r).toLowerCase().split(/[^a-z0-9+#.]+/)) {
-      if (w.length > 2 && !STOP.has(w)) out.add(w);
-    }
-  }
-  return [...out];
+// Written many ways, meaning the same job.
+const SYNONYM = new Map(Object.entries({
+  engineer: 'eng', engineers: 'eng', engineering: 'eng', developer: 'eng', developers: 'eng',
+  dev: 'eng', programmer: 'eng', coder: 'eng',
+  manager: 'mgr', head: 'mgr', director: 'mgr',
+  analyst: 'analysis', analytics: 'analysis',
+  designer: 'design',
+  scientist: 'science',
+  administrator: 'admin', admin: 'admin',
+}));
+// The head word of a title says what the job *is*. On its own it says nothing about
+// which one: "Sales Engineer" must not answer a search for "Backend Engineer".
+const HEADS = new Set(['eng', 'mgr', 'analysis', 'design', 'science', 'admin',
+  'architect', 'consultant', 'specialist', 'lead', 'officer', 'associate', 'intern']);
+// Modifiers too vague to distinguish one role from another.
+const VAGUE = new Set(['software', 'technical', 'technology', 'application', 'applications',
+  'system', 'systems', 'computer', 'digital', 'general', 'new', 'team']);
+
+const LEVELS = [
+  [0, /\b(intern|internship|trainee|graduate|apprentice|working student|werkstudent)\b/i],
+  [1, /\b(junior|jr|entry[- ]level|associate)\b/i],
+  [3, /\b(senior|sr|snr)\b/i],
+  [4, /\b(staff|principal|lead|expert)\b/i],
+  [5, /\b(manager|head of|engineering manager)\b/i],
+  [6, /\b(director|vp|vice president|chief|cto|head of engineering)\b/i],
+];
+// 2 is the unmarked middle: a title with no level word is a mid-level role. The
+// highest marker wins, so "Senior Data Engineering Manager" is a manager role and
+// not a senior one — matching in listed order got that backwards.
+function levelOf(text) {
+  let best = null;
+  for (const [n, re] of LEVELS) if (re.test(text)) best = best === null ? n : Math.max(best, n);
+  return best === null ? 2 : best;
 }
 
-// Words that appear in half the tech job titles ever written. On their own they say
-// nothing: "Sales Engineer" should not match a search for "Backend Engineer".
-const GENERIC = new Set(['software', 'engineer', 'engineering', 'developer', 'development',
-  'manager', 'specialist', 'analyst', 'consultant', 'architect', 'technical', 'technology',
-  'systems', 'system', 'application', 'applications', 'programmer', 'officer', 'associate']);
+// Spellings that split or join the same word.
+function normalise(text) {
+  return ' ' + String(text).toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, ' ')
+    .replace(/\bfull[ -]?stack\b/g, 'fullstack')
+    .replace(/\bfront[ -]?end\b/g, 'frontend')
+    .replace(/\bback[ -]?end\b/g, 'backend')
+    .replace(/\bdev[ -]?ops\b/g, 'devops')
+    .replace(/\bmachine learning\b/g, 'ml')
+    .replace(/\s+/g, ' ') + ' ';
+}
+function tokens(text) {
+  return normalise(text).trim().split(' ').filter(Boolean).map(w => SYNONYM.get(w) || w);
+}
 
-// A posting is relevant when its title carries a distinctive word from one of the
-// target roles, or at least two of the generic ones. Titles are short, so this is
-// strict enough to keep the list clean without needing the description.
-function relevance(title, words) {
-  const t = ' ' + String(title).toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ') + ' ';
-  let distinct = 0, generic = 0;
-  for (const w of words) {
-    if (!t.includes(' ' + w) && !t.includes(w + ' ')) continue;
-    if (GENERIC.has(w)) generic++; else distinct++;
+// A target role becomes the words that identify it (what kind of work) and the head
+// word (what the job is). "Senior Backend Engineer" -> key [backend], head eng.
+function parseRole(role) {
+  const all = tokens(role);
+  const key = [], heads = [];
+  for (const w of all) {
+    if (HEADS.has(w)) { heads.push(w); continue; }
+    if (w.length <= 2 || VAGUE.has(w)) continue;
+    if (/^(senior|sr|snr|junior|jr|staff|principal|lead|mid|entry|level|intern|graduate|i|ii|iii)$/.test(w)) continue;
+    key.push(w);
   }
-  if (distinct) return 1 + distinct;
-  return generic >= 2 ? 1 : 0;
+  return { label: role, key: [...new Set(key)], heads: [...new Set(heads)], level: levelOf(role) };
+}
+
+// A posting matches a role when it carries every identifying word of that role, and
+// the same kind of head word. Roles with no identifying word of their own (plain
+// "Software Engineer") have to match the head and are confirmed against the skills.
+function matchesRole(titleTokens, role) {
+  const has = w => titleTokens.includes(w);
+  const headOk = !role.heads.length || role.heads.some(has);
+  if (!headOk) return 0;
+  if (!role.key.length) return 1;               // generic role: head match only, weak
+  if (!role.key.every(has)) return 0;
+  return 2 + role.key.length;                   // every identifying word present
+}
+
+// Skills from the resume, looked for in the posting's own text. Used to rank, and to
+// confirm the weak matches above rather than to let new ones in.
+function skillHits(text, skills) {
+  if (!text || !skills.length) return 0;
+  const t = normalise(text);
+  let n = 0;
+  for (const sk of skills) {
+    const w = normalise(sk).trim();
+    if (w.length > 2 && t.includes(' ' + w + ' ')) n++;
+  }
+  return n;
+}
+
+// Returns 0 to reject. Higher is a better match.
+function relevance(p, roles, skills, candidateLevel) {
+  const tt = tokens(p.title);
+  let best = 0;
+  for (const role of roles) {
+    const m = matchesRole(tt, role);
+    if (m > best) best = m;
+  }
+  if (!best) return 0;
+
+  // Someone with seven years behind them does not want an internship, and is not
+  // getting the VP role either.
+  const lvl = levelOf(p.title);
+  if (Number.isFinite(candidateLevel)) {
+    if (lvl === 0 && candidateLevel >= 2) return 0;
+    // One step either way. A senior engineer is shown staff and mid roles, not an
+    // internship and not an engineering director.
+    if (Math.abs(lvl - candidateLevel) > 1) return 0;
+  }
+
+  const hits = skillHits((p.title || '') + ' ' + (p.desc || ''), skills);
+  if (best === 1 && !hits) return 0;            // vague title, nothing to back it up
+  return best + Math.min(hits, 4);
 }
 
 // Feed locations are free text ("Dubai, UAE", "Lausanne, Vaud", "Remote - EMEA"), so
@@ -334,9 +422,16 @@ async function dropDeadLinks(list) {
 // companies  the shortlist the model produced, checked against their own careers feed
 // days       only postings published within this many days (0 = any age)
 // workSetup  '', 'remote', 'hybrid' or 'onsite'
-async function search({ roles = [], companies = [], country = '', workSetup = '', days = 7, limit = 60 } = {}) {
-  const words = terms(roles);
-  const queries = (roles || []).slice(0, 3).map(String);
+async function search({ roles = [], companies = [], country = '', workSetup = '',
+                        days = 7, limit = 60, skills = [], level } = {}) {
+  const parsed = (roles || []).map(String).filter(Boolean).slice(0, 8).map(parseRole)
+    .filter(r => r.key.length || r.heads.length);
+  const skillList = (skills || []).map(String).filter(Boolean).slice(0, 25);
+  const candidateLevel = Number.isFinite(+level) ? +level
+    : (parsed.length ? Math.round(parsed.reduce((a, r) => a + r.level, 0) / parsed.length) : undefined);
+  // Each target title is searched on its own: one merged query returns whatever the
+  // board thinks those words mean together, which is rarely any of the roles.
+  const queries = [...new Set(parsed.map(r => r.label))].slice(0, 3);
   const sources = [];
   const all = [];
 
@@ -348,7 +443,14 @@ async function search({ roles = [], companies = [], country = '', workSetup = ''
     .filter(b => !(b.remoteOnly && (workSetup === 'onsite' || workSetup === 'hybrid')))
     .map(async b => {
       try {
-        const got = b.fetch.length ? await b.fetch(queries[0] || '') : await b.fetch();
+        let got;
+        if (b.fetch.length) {
+          const runs = await Promise.all((queries.length ? queries : ['']).map(q =>
+            b.fetch(q).catch(() => [])));
+          got = runs.flat();
+        } else {
+          got = await b.fetch();
+        }
         sources.push({ id: b.id, label: b.label, ok: true, count: got.length });
         jobs.push(...got);
       } catch (e) {
@@ -384,7 +486,8 @@ async function search({ roles = [], companies = [], country = '', workSetup = ''
     if (!p.url || !p.title || !p.company) continue;
     if (!p.postedAt) continue;                       // no date means we cannot vouch for it
     if (cutoff && Date.parse(p.postedAt) < cutoff) continue;
-    if (relevance(p.title, words) <= 0) continue;
+    const score = relevance(p, parsed, skillList, candidateLevel);
+    if (score <= 0) continue;
     if (!matchesCountry(p, country, workSetup)) continue;
     // An unknown arrangement is not a match. Feeds that omit it would otherwise pass
     // every filter, which is exactly how stale, irrelevant roles reached the list.
@@ -392,12 +495,17 @@ async function search({ roles = [], companies = [], country = '', workSetup = ''
     const key = (p.company + '|' + p.title).toLowerCase().replace(/\s+/g, ' ');
     if (seen.has(key)) continue;
     seen.add(key);
-    p.score = relevance(p.title, words);
+    p.score = score;
     all.push(p);
   }
 
-  all.sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt));
-  const shown = await dropDeadLinks(all.slice(0, limit));
+  // Freshest first, but a clearly better match wins a tie on the same day.
+  all.sort((a, b) => {
+    const d = Date.parse(b.postedAt) - Date.parse(a.postedAt);
+    if (Math.abs(d) > 43200000) return d;
+    return (b.score - a.score) || d;
+  });
+  const shown = (await dropDeadLinks(all.slice(0, limit))).map(({ desc, ...rest }) => rest);
   return {
     jobs: shown, sources, checked: shortlist.length, scanned: jobs.length,
     dropped: Math.min(all.length, limit) - shown.length,

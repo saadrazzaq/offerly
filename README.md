@@ -17,7 +17,16 @@ By default it runs **entirely on your machine**, through an **AI agent you alrea
 
 ## Choose your AI engine
 
-Offerly is not tied to one provider. Open **⚙ Engine**, pick one from the list, fill in whatever it asks for, and press **Connect** — Offerly sends one short prompt to prove the engine really answers before you wait on a full analysis. A bad key or a missing CLI fails there, with the provider's own message.
+Offerly is not tied to one provider. Open **⚙ Engine**, pick your provider, then choose one of **two ways to connect it**:
+
+| | What it is | What it costs |
+|---|---|---|
+| 🔐 **Sign in** | Your own account, through that vendor's official CLI login | Runs on the plan you already pay for — Claude Pro/Max, ChatGPT Plus/Pro, Google, Cursor |
+| 🔑 **API key** | A key you paste in | Pay-per-token, billed separately from any chat subscription |
+
+Claude, ChatGPT and Gemini each offer both. Cursor is sign-in only, Ollama needs neither, and an OpenAI-compatible endpoint is key only.
+
+Fill in whatever the chosen path asks for and press **Connect** — Offerly sends one short prompt to prove the engine really answers before you wait on a full analysis. A bad key or a missing CLI fails there, with the provider's own message.
 
 Each engine declares what it needs, so the form changes with your choice: an API key for a provider, a base URL and model for a custom endpoint, an optional binary path for a CLI that is not on `PATH`, or the command line for any other agent.
 
@@ -32,7 +41,7 @@ Each engine declares what it needs, so the form changes with your choice: an API
 | **OpenAI / Anthropic / Gemini API** | pay-per-token | paste an API key |
 | **Any OpenAI-compatible API** | pay-per-token | OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM — base URL, key and model |
 
-### Signing in to a CLI engine
+### How the sign-in path works
 
 No provider lets a third-party page run on a consumer subscription — Anthropic's terms restrict Free/Pro/Max OAuth tokens to Claude Code and claude.ai, "Sign in with ChatGPT" grants identity but not model usage on your plan, and Gemini needs an API key or a Vertex project. So the sign-in happens in the vendor's own client, which is what makes a subscription work here at all.
 
@@ -81,7 +90,13 @@ Two different things, kept clearly apart on the page, because they are not equal
 | Arbeitnow | remote and on-site, strongest in Europe |
 | Greenhouse, Lever, Ashby | each shortlisted company's own careers feed — how on-site roles are found |
 
-A posting is only shown if it carries a publication date inside your window, its title matches one of your target roles on a distinctive word, its stated location is in your country, and its work setup matches. Postings with no location or no stated arrangement are dropped rather than guessed at, and every link is checked before the page shows it, so a vacancy the employer has already pulled does not reach you.
+A posting is only shown if it clears all of these:
+
+- **Published inside your window**, per the source's own date.
+- **The title matches one of your target roles as a phrase.** Each role is matched on its own rather than pooled into a bag of words — pooling was why "Data Engineer" in your list let "Data Entry Clerk" through on the word "data". A role's identifying words must all be present, and the head word has to agree, with `engineer`/`developer`/`programmer` treated as the same thing and `full stack`/`fullstack` spelled either way.
+- **The seniority is within one step of yours.** No internships for a senior engineer, and no engineering-director posts either.
+- **Your skills appear in the job description** where the title alone is too vague to judge. Descriptions also rank the survivors, so a posting naming your actual stack sorts above one that does not.
+- **Its stated location is in your country** and its work setup matches. Postings with no location or no stated arrangement are dropped rather than guessed at, and every link is checked before the page shows it, so a vacancy the employer has already pulled does not reach you.
 
 **Honest limits.** Coverage is excellent for remote roles and for companies on Greenhouse, Lever or Ashby. It is thin for on-site roles in markets served mainly by regional boards — Bayt, GulfTalent and NaukriGulf publish no open API, and LinkedIn and Indeed do not allow this kind of access. When nothing is verified the page says so, tells you how many companies and postings it checked, and falls back to the shortlist.
 

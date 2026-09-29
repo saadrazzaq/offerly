@@ -237,6 +237,15 @@
     <h3>AI engine</h3>
     <p class="sub">Offerly runs on whichever AI agent you already have — Claude Code, Gemini CLI, OpenAI Codex, Cursor, a local Ollama model, or your own API key.</p>
     <div class="field">
+      <label class="lab" for="provider">AI provider</label>
+      <select id="provider"></select>
+    </div>
+    <div class="field" id="authModeField">
+      <label class="lab">How to connect</label>
+      <div class="presets" id="authMode"></div>
+      <p class="hint" id="authNote"></p>
+    </div>
+    <div class="field" style="display:none">
       <label class="lab" for="engine">Engine</label>
       <select id="engine"></select>
       <p class="hint" id="engineNote"></p>
@@ -391,14 +400,11 @@ function renderEngines(list,def,canSave){
   sel.innerHTML='';
   ENGINES.forEach(e=>{
     const o=document.createElement('option');
-    o.value=e.id;
-    o.textContent=e.label+(e.available?'':(localCreds(e.id)?' — key in this browser':' — not connected'));
-    sel.appendChild(o);   /* selectable even when unconnected, so you can set it up */
+    o.value=e.id;o.textContent=e.label;
+    sel.appendChild(o);
   });
   const pick=(saved&&ENGINES.some(e=>e.id===saved))?saved:(def||(ENGINES.find(e=>!e.blocked)||{}).id);
-  if(pick)sel.value=pick;
-  sel.onchange=()=>renderEngineDetail(sel.value);
-  renderEngineDetail(sel.value);
+  renderProviders(pick);
 }
 
 /* Fields are declared by the engine, so a new provider needs no UI work. */
@@ -560,6 +566,72 @@ async function refreshAuth(id){
       status.innerHTML='🔑 Installed, but not signed in. Press <b>'+escapeHTMLish(e.login.label)+'</b>.';
     }
   }catch(_){/* the picker still works without this */}
+}
+/* ⚙ Engine offers a provider, then the ways that provider can be connected:
+   sign in with your own account, or paste an API key. Both end up selecting one of
+   the engines the backend reported, so everything downstream is unchanged. */
+function providerList(){
+  const out=[];
+  ENGINES.forEach(e=>{
+    let g=out.find(x=>x.id===e.provider);
+    if(!g){g={id:e.provider,label:e.providerLabel||e.provider,options:[]};out.push(g);}
+    g.options.push(e);
+  });
+  return out;
+}
+function renderProviders(preferId){
+  const psel=$('provider');
+  if(!psel||!ENGINES.length)return;
+  const groups=providerList();
+  const fromEngine=preferId&&(ENGINES.find(e=>e.id===preferId)||{}).provider;
+  const saved=localStorage.getItem('provider');
+  psel.innerHTML='';
+  groups.forEach(g=>{
+    const o=document.createElement('option');
+    o.value=g.id;
+    const ready=g.options.some(e=>e.available||localCreds(e.id));
+    o.textContent=g.label+(ready?' ✓':'');
+    psel.appendChild(o);
+  });
+  const pick=fromEngine||(groups.some(g=>g.id===saved)?saved:null)
+    ||(groups.find(g=>g.options.some(e=>e.available))||groups[0]||{}).id;
+  if(pick)psel.value=pick;
+  psel.onchange=()=>{localStorage.setItem('provider',psel.value);renderAuthModes();};
+  renderAuthModes(preferId);
+}
+function renderAuthModes(preferId){
+  const psel=$('provider'), box=$('authMode'), note=$('authNote');
+  if(!psel||!box)return;
+  const g=providerList().find(x=>x.id===psel.value);
+  if(!g)return;
+  const savedMode=localStorage.getItem('authMode.'+g.id);
+  let chosen=(preferId&&g.options.find(e=>e.id===preferId))
+    ||g.options.find(e=>e.auth===savedMode&&(e.available||localCreds(e.id)))
+    ||g.options.find(e=>e.available||localCreds(e.id))
+    ||g.options.find(e=>e.auth===savedMode)
+    ||g.options[0];
+  box.innerHTML='';
+  g.options.forEach(e=>{
+    const b=document.createElement('button');
+    b.type='button';b.className='btn'+(e.id===chosen.id?' send':'');
+    const ready=e.available||localCreds(e.id);
+    b.textContent=(e.auth==='sso'?'🔐 ':e.auth==='key'?'🔑 ':'')+(e.authLabel||e.label)+(ready?' ✓':'');
+    b.onclick=()=>{localStorage.setItem('authMode.'+g.id,e.auth);selectEngine(e.id);};
+    box.appendChild(b);
+  });
+  if(note)note.textContent=chosen.authNote||'';
+  selectEngine(chosen.id,true);
+}
+/* Drives the hidden engine select the rest of the panel already reads. */
+function selectEngine(id,quiet){
+  const sel=$('engine');
+  if(!sel)return;
+  if(![...sel.options].some(o=>o.value===id)){
+    const o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);
+  }
+  sel.value=id;
+  if(!quiet)renderAuthModes(id);
+  else renderEngineDetail(id);
 }
 function listJoin(a){return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
 function escapeHTMLish(t){const d=document.createElement('div');d.textContent=String(t);return d.innerHTML;}
