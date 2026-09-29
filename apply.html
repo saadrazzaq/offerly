@@ -241,12 +241,22 @@
       <select id="engine"></select>
       <p class="hint" id="engineNote"></p>
     </div>
+    <div id="engineFields"></div>
     <div class="field">
       <label class="lab" for="model">Model</label>
       <select id="model"></select>
     </div>
-    <p class="hint" id="bridgeNote" style="margin-bottom:14px">Checking connection…</p>
-    <button class="cta" style="width:100%" onclick="saveSettings()">Save</button>
+    <label class="hint" id="engineRemember" style="display:flex;align-items:center;gap:8px;margin:0 0 10px">
+      <input type="checkbox" id="engineRememberBox" checked style="width:auto;margin:0">
+      Save this key on my computer (in <code>offerly.engines.json</code>). Untick to keep it in this browser only.
+    </label>
+    <p class="hint" id="engineStatus"></p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="cta" id="engineConnect" style="flex:1" onclick="connectEngine()">Connect</button>
+      <button class="btn" id="engineForget" onclick="forgetEngine()">Clear</button>
+      <button class="btn" onclick="saveSettings()">Use without testing</button>
+    </div>
+    <p class="hint" id="bridgeNote" style="margin:12px 0 0">Checking connection…</p>
   </div>
 </div>
 
@@ -315,7 +325,7 @@ async function checkBridge(){
     const local=await probe(LOCAL_BRIDGE);
     if(local){BRIDGE=LOCAL_BRIDGE;REMOTE=!!(SELF&&SELF!==LOCAL_BRIDGE);j=local;}
   }
-  if(j)renderEngines(j.engines,j.defaultEngine);
+  if(j)renderEngines(j.engines,j.defaultEngine,j.canSave);
   if(j&&j.ok){
     const e=(j.engines||[]).find(x=>x.id===(localStorage.getItem('engine')||j.defaultEngine))||{};
     dot.style.color='var(--green)';
@@ -331,34 +341,132 @@ async function checkBridge(){
   }
 }
 
-/* The ⚙ picker is built from whatever the backend reports, so an agent you install
-   later shows up on the next reload without a code change. The model choice is kept
-   per engine — a Claude model must not leak into a Gemini run. */
-function renderEngines(list,def){
+/* ---------- engine picker ---------- */
+/* Built from whatever the backend reports, so an agent you install later, or a key
+   you paste here, shows up without a code change. The model choice is kept per
+   engine — a Claude model must not leak into a Gemini run. */
+let CAN_SAVE=true;
+function currentEngine(){return localStorage.getItem('engine')||'';}
+function engineInfo(id){return ENGINES.find(x=>x.id===(id||currentEngine()))||null;}
+
+/* A key the server cannot store (hosted deployment, or you chose not to save it)
+   is kept here and sent with each request instead. */
+function localCreds(id){try{return JSON.parse(localStorage.getItem('creds.'+id)||'null');}catch{return null;}}
+function setLocalCreds(id,v){try{v?localStorage.setItem('creds.'+id,JSON.stringify(v)):localStorage.removeItem('creds.'+id);}catch{}}
+
+function renderEngines(list,def,canSave){
   ENGINES=list||[];
+  if(canSave!==undefined)CAN_SAVE=canSave;
   const sel=$('engine');
   if(!sel||!ENGINES.length)return;
   const saved=localStorage.getItem('engine');
   sel.innerHTML='';
   ENGINES.forEach(e=>{
     const o=document.createElement('option');
-    o.value=e.id;o.textContent=e.label+(e.available?'':' — not set up');o.disabled=!e.available;
-    sel.appendChild(o);
+    o.value=e.id;
+    o.textContent=e.label+(e.available?'':(localCreds(e.id)?' — key in this browser':' — not connected'));
+    sel.appendChild(o);   /* selectable even when unconnected, so you can set it up */
   });
-  const pick=(saved&&ENGINES.some(e=>e.id===saved&&e.available))?saved:def;
+  const pick=(saved&&ENGINES.some(e=>e.id===saved))?saved:def;
   if(pick)sel.value=pick;
-  sel.onchange=()=>renderModels(sel.value);
-  renderModels(sel.value);
+  sel.onchange=()=>renderEngineDetail(sel.value);
+  renderEngineDetail(sel.value);
 }
-function renderModels(id){
-  const e=ENGINES.find(x=>x.id===id),note=$('engineNote'),sel=$('model');
-  if(note)note.textContent=e?(e.available?e.note:e.install):'';
-  if(!sel||!e)return;
-  sel.innerHTML='';
-  e.models.forEach(m=>{const o=document.createElement('option');o.value=m.value;o.textContent=m.label;sel.appendChild(o);});
-  const saved=localStorage.getItem('model.'+id);
-  if(saved!==null&&e.models.some(m=>m.value===saved))sel.value=saved;
+
+/* Fields are declared by the engine, so a new provider needs no UI work. */
+function renderEngineDetail(id){
+  const e=engineInfo(id),box=$('engineFields'),note=$('engineNote'),msel=$('model');
+  if(note)note.innerHTML=e?(e.blocked||e.note||''):'';
+  if(box){
+    box.innerHTML='';
+    const held=localCreds(id)||{};
+    (e?e.fields:[]).forEach(f=>{
+      const wrap=document.createElement('div');
+      wrap.className='field';
+      const lab=document.createElement('label');
+      lab.className='lab';lab.setAttribute('for','ef_'+f.key);
+      lab.textContent=f.label+(f.required?'':'');
+      const inp=document.createElement('input');
+      inp.id='ef_'+f.key;inp.type=f.secret?'password':'text';
+      inp.placeholder=f.placeholder||'';inp.autocomplete='off';inp.spellcheck=false;
+      inp.value=f.secret?(held[f.key]||''):(f.value||'');
+      const hint=document.createElement('p');
+      hint.className='hint';
+      const bits=[];
+      if(f.help)bits.push(f.help);
+      if(f.secret&&f.set&&f.source==='saved')bits.push('A key is saved — leave blank to keep it.');
+      if(f.source==='env')bits.push('Currently coming from the '+f.env+' environment variable.');
+      hint.textContent=bits.join(' ');
+      wrap.appendChild(lab);wrap.appendChild(inp);
+      if(hint.textContent)wrap.appendChild(hint);
+      box.appendChild(wrap);
+    });
+    const rememberRow=$('engineRemember');
+    if(rememberRow)rememberRow.style.display=(e&&e.fields&&e.fields.some(f=>f.secret))?'':'none';
+    const forget=$('engineForget');
+    if(forget)forget.style.display=(e&&e.fields&&e.fields.some(f=>f.set||held[f.key]))?'':'none';
+  }
+  if(msel&&e){
+    msel.innerHTML='';
+    e.models.forEach(m=>{const o=document.createElement('option');o.value=m.value;o.textContent=m.label;msel.appendChild(o);});
+    const saved=localStorage.getItem('model.'+id);
+    if(saved!==null&&e.models.some(m=>m.value===saved))msel.value=saved;
+  }
+  setConnectState(e);
 }
+function setConnectState(e){
+  const s=$('engineStatus');
+  if(!s)return;
+  if(!e){s.textContent='';return;}
+  if(e.available)s.innerHTML='🟢 Connected.';
+  else if(localCreds(e.id))s.innerHTML='🔵 Using a key kept in this browser. Press Connect to check it.';
+  else if(e.blocked)s.innerHTML='⚪ '+e.blocked;
+  else if(e.missing&&e.missing.length)s.innerHTML='⚪ Needs '+listJoin(e.missing)+'.';
+  else s.innerHTML='⚪ '+(e.install||'Not connected yet.');
+}
+
+/* Connect = save (or keep in the browser) + one real round trip to the engine. */
+async function connectEngine(){
+  const id=$('engine').value,e=engineInfo(id);
+  if(!e)return;
+  const btn=$('engineConnect'),status=$('engineStatus');
+  const values={};
+  e.fields.forEach(f=>{const el=$('ef_'+f.key);if(el)values[f.key]=el.value.trim();});
+  const keepLocal=!CAN_SAVE||($('engineRememberBox')&&!$('engineRememberBox').checked);
+  btn.disabled=true;const was=btn.textContent;btn.textContent='Connecting…';
+  status.innerHTML='⏳ Asking '+e.label+' to answer once — this can take a minute for a CLI agent.';
+  try{
+    const j=await post('/api/engine-connect',{engine:id,model:$('model').value,values,remember:!keepLocal});
+    if(keepLocal&&e.fields.some(f=>f.secret&&values[f.key]))setLocalCreds(id,values);
+    else setLocalCreds(id,null);
+    localStorage.setItem('engine',id);
+    localStorage.setItem('model.'+id,$('model').value);
+    if(j.engineInfo){
+      const i=ENGINES.findIndex(x=>x.id===id);
+      if(i>=0)ENGINES[i]=j.engineInfo;
+    }
+    status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.';
+    e.available=true;
+    toast('Connected to '+e.label);
+    checkBridge();
+  }catch(err){
+    status.innerHTML='🔴 '+escapeHTMLish(err.message);
+  }finally{
+    btn.disabled=false;btn.textContent=was;
+  }
+}
+async function forgetEngine(){
+  const id=$('engine').value;
+  setLocalCreds(id,null);
+  try{const info=await post('/api/engine-forget',{engine:id});
+    const i=ENGINES.findIndex(x=>x.id===id);if(i>=0)ENGINES[i]=info;
+  }catch(e){/* nothing stored server-side is fine */}
+  toast('Cleared');
+  renderEngineDetail(id);
+  checkBridge();
+}
+function listJoin(a){return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+function escapeHTMLish(t){const d=document.createElement('div');d.textContent=String(t);return d.innerHTML;}
 
 
 function openSettings(){$('settings').classList.add('show');}
@@ -385,7 +493,7 @@ async function post(path,body){
 }
 async function callClaude(prompt,images){
   const engine=localStorage.getItem('engine')||'';
-  const j=await post('/api',{prompt,images,engine,model:localStorage.getItem('model.'+engine)||''});
+  const j=await post('/api',{prompt,images,engine,model:localStorage.getItem('model.'+engine)||'',values:localCreds(engine)});
   return j.text||'';
 }
 async function callJSON(prompt,images){

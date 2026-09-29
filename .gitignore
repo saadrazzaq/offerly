@@ -17,3 +17,6 @@ Thumbs.db
 
 # Email settings — contains your SMTP app password
 offerly.mail.json
+
+# Engine settings — contains your API keys
+offerly.engines.json

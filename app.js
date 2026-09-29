@@ -209,7 +209,8 @@ function logResponse(model, prompt, text) {
 }
 
 // Sensitive routes: only callable from your own Offerly pages.
-const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test']);
+const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
+  '/api/engine-config', '/api/engine-connect', '/api/engine-forget']);
 
 // --- routes ----------------------------------------------------------------
 async function handle(req, res) {
@@ -239,19 +240,48 @@ async function handle(req, res) {
   if (req.method === 'GET' && (url === '/apply' || url === '/apply.html')) return servePage(res, 'apply.html');
 
   // /health tells the page whether anything can run; /api/engines fills the picker.
+  // Stored secrets are never included — a field only reports that one is set.
   if (req.method === 'GET' && (url === '/health' || url === '/api/engines')) {
     const list = engines.listEngines();
     return sendJSON(res, 200, {
       ok: list.some(e => e.available),
       engines: list,
       defaultEngine: engines.defaultEngine(),
+      canSave: !engines.SERVERLESS, // a serverless deployment has no writable disk
     });
   }
 
   try {
+    // Save what you typed in ⚙ Engine (API key, base URL, binary path, command).
+    if (req.method === 'POST' && url === '/api/engine-config') {
+      const { engine, values } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      return sendJSON(res, 200, engines.saveConfig(engine, values || {}));
+    }
+
+    // Forget everything stored for one engine.
+    if (req.method === 'POST' && url === '/api/engine-forget') {
+      const { engine } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      return sendJSON(res, 200, engines.forgetConfig(engine));
+    }
+
+    // The Connect button: save first (unless the page is keeping the key itself),
+    // then prove the engine answers before anyone waits on a real analysis.
+    if (req.method === 'POST' && url === '/api/engine-connect') {
+      const { engine, model, values, remember } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      if (remember !== false && values && Object.keys(values).length) engines.saveConfig(engine, values);
+      const result = await engines.test(engine, model, values || null);
+      return sendJSON(res, 200, { ...result, engineInfo: engines.describe(engines.BY_ID.get(engine)) });
+    }
+
     if (req.method === 'POST' && url === '/api') {
-      const { prompt, model, engine, images } = await readJSON(req, 30e6);
+      const { prompt, model, engine, images, values } = await readJSON(req, 30e6);
       if (!prompt) throw new Error('Missing prompt.');
+      // A page may hold its own key (a hosted copy with nothing saved server-side);
+      // only our own pages are allowed to pass one.
+      const creds = values && trustedOrigin(req) ? values : null;
       // Screenshots are only accepted from trusted pages.
       let pics = [];
       if (Array.isArray(images) && images.length) {
@@ -259,7 +289,7 @@ async function handle(req, res) {
         if (images.length > 5) throw new Error('Up to 5 screenshots per job.');
         pics = images;
       }
-      const out = await engines.run(prompt, engine, model, pics);
+      const out = await engines.run(prompt, engine, model, pics, creds);
       logResponse(out.engine + '/' + (out.model || 'default'), prompt, out.text);
       return sendJSON(res, 200, { text: out.text, engine: out.engine, model: out.model });
     }

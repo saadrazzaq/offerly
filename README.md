@@ -16,7 +16,9 @@ By default it runs **entirely on your machine**, through an **AI agent you alrea
 
 ## Choose your AI engine
 
-Offerly is not tied to one provider. The bridge detects every agent installed on your machine and lists them under **⚙ Engine**; pick one and it is remembered per browser. Anything not installed is shown greyed out with the command that enables it.
+Offerly is not tied to one provider. Open **⚙ Engine**, pick one from the list, fill in whatever it asks for, and press **Connect** — Offerly sends one short prompt to prove the engine really answers before you wait on a full analysis. A bad key or a missing CLI fails there, with the provider's own message.
+
+Each engine declares what it needs, so the form changes with your choice: an API key for a provider, a base URL and model for a custom endpoint, an optional binary path for a CLI that is not on `PATH`, or the command line for any other agent.
 
 | Engine | How it bills | What you need |
 |--------|--------------|---------------|
@@ -25,21 +27,33 @@ Offerly is not tied to one provider. The bridge detects every agent installed on
 | **OpenAI Codex CLI** | your ChatGPT plan | `npm i -g @openai/codex`, then run `codex` once |
 | **Cursor CLI** | your Cursor subscription | Cursor installed, `cursor-agent login` |
 | **Ollama** | free, fully offline | Ollama + a pulled model (`ollama pull llama3.1`) |
-| **Other agent** | whatever it uses | any CLI that reads a prompt on stdin: `OFFERLY_AGENT_CMD` |
-| **OpenAI / Anthropic / Gemini API** | pay-per-token | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` |
-| **Any OpenAI-compatible API** | pay-per-token | OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM — see below |
+| **Other agent** | whatever it uses | any CLI that reads a prompt on stdin — give it the command |
+| **OpenAI / Anthropic / Gemini API** | pay-per-token | paste an API key |
+| **Any OpenAI-compatible API** | pay-per-token | OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM — base URL, key and model |
 
-Useful overrides:
+### Where your keys are kept
+
+A key you enter is saved to **`offerly.engines.json`** in the project folder, readable only by you and gitignored — the same arrangement as the SMTP password in `offerly.mail.json`. It is never sent back to the page: the form only reports that a key is set.
+
+Untick **"Save this key on my computer"** and it stays in that browser's local storage instead, travelling with each request. That is the option for a shared machine, or for a hosted copy that has no disk of its own. **Clear** removes both copies.
+
+### Environment variables
+
+Everything above can also come from the environment, which is how a serverless deployment is configured. A saved value wins over an environment variable, and the ⚙ panel says which one is in force.
+
+| Engine | Variables |
+|--------|-----------|
+| OpenAI / Anthropic / Gemini API | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` |
+| OpenAI-compatible | `OFFERLY_OPENAI_BASE_URL`, `OFFERLY_OPENAI_KEY`, `OFFERLY_OPENAI_MODEL` |
+| CLI binaries | `CLAUDE_BIN`, `GEMINI_BIN`, `CODEX_BIN`, `CURSOR_BIN`, `OLLAMA_BIN` |
+| Custom agent | `OFFERLY_AGENT_CMD`, `OFFERLY_AGENT_ARGS` |
+
+Other useful overrides:
 
 ```bash
-OFFERLY_ENGINE=gemini node bridge.js          # default engine at startup
-CLAUDE_BIN="C:\path\to\claude.exe" node bridge.js   # also GEMINI_BIN, CODEX_BIN, CURSOR_BIN, OLLAMA_BIN
+OFFERLY_ENGINE=gemini node bridge.js                   # default engine at startup
 OFFERLY_GEMINI_ARGS="-m gemini-2.5-pro" node bridge.js # replace an engine's CLI flags outright
 OFFERLY_TIMEOUT_MS=360000 node bridge.js               # give a slow local model more time
-
-# any OpenAI-compatible endpoint
-OFFERLY_OPENAI_BASE_URL="https://openrouter.ai/api/v1" \
-OFFERLY_OPENAI_KEY=sk-... OFFERLY_OPENAI_MODEL="anthropic/claude-sonnet-4.5" node bridge.js
 ```
 
 Every CLI engine receives its prompt on **stdin**, because a resume plus a job post is far longer than a Windows command line allows. If your CLI version wants different flags, set `OFFERLY_<ENGINE>_ARGS` rather than editing `engines.js`.
@@ -71,7 +85,7 @@ node bridge.js
 
 Then open **http://localhost:8787/**. The startup banner lists the agents it found.
 
-1. Pick your **engine and model** in ⚙
+1. Pick your **engine and model** in ⚙ and press **Connect**
 2. **Upload** your resume (PDF / DOCX / TXT)
 3. Select **target country** and **career stage**
 4. Hit **Analyze & Find My Jobs**
@@ -108,7 +122,8 @@ vercel --prod
 How the hosted copy gets its AI depends on what you configure:
 
 - **Set an API key** in the Vercel project's environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or the `OFFERLY_OPENAI_*` trio) and the deployment answers on its own — anyone you share the link with can use it, billed to that key.
-- **Set nothing** and the page automatically falls back to a bridge on the visitor's own machine, exactly as before. Start it with
+- **Let each visitor bring their own key.** A serverless deployment has no writable disk, so the ⚙ panel keeps the key in that visitor's browser and sends it with each request. Nothing is stored on the server, and one person's key is never visible to another.
+- **Set nothing at all** and the page automatically falls back to a bridge on the visitor's own machine, exactly as before. Start it with
   `OFFERLY_ALLOWED_ORIGINS="https://your-app.vercel.app" node bridge.js`.
 
 To send email from the hosted copy, set the SMTP login as environment variables — a serverless deployment has no writable disk, so `offerly.mail.json` is not available there:
@@ -149,7 +164,7 @@ Serverless limits worth knowing:
 | `index.html` | Job finder (resume analysis, ATS score, matched roles) |
 | `apply.html` | Bulk apply — generate, review and send application emails |
 | `app.js` | Every route: AI calls, job-page fetching, email — shared by the bridge and Vercel |
-| `engines.js` | Engine registry: finds each agent, builds its command line, calls the APIs |
+| `engines.js` | Engine registry: what each agent needs, how to find it, how to call it |
 | `bridge.js` | Local server on `localhost:8787` |
 | `api/` | Vercel functions — thin wrappers around `app.js` |
 | `vercel.json` | Deployment config (routing, function limits) |
