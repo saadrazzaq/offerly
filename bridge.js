@@ -5,7 +5,20 @@
 const http = require('http');
 const { handle, PORT, engines, loadMailCfg, publicMailCfg } = require('./app');
 
-http.createServer(handle).listen(PORT, '127.0.0.1', () => {
+const server = http.createServer(handle);
+// A second copy cannot take the port, and the first one keeps answering with
+// whatever code it started with — which is how a restart could appear to change
+// nothing. Say so instead of dying with a stack trace.
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('\n  Offerly is already running on port ' + PORT + ' — this copy did not start.');
+    console.error('  Close the other Offerly window (or end the node.exe process using port ' + PORT + ')');
+    console.error('  and start this one again, so the page talks to the current version.\n');
+    process.exit(1);
+  }
+  throw err;
+});
+server.listen(PORT, '127.0.0.1', () => {
   const ready = engines.listEngines().filter(e => e.available);
   const def = engines.defaultEngine();
   console.log('\n  Offerly bridge running');

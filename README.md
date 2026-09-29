@@ -196,10 +196,9 @@ vercel --prod
 The other two arrangements still work:
 
 - **Put a key in the project's environment variables** (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or the `OFFERLY_OPENAI_*` trio) and the deployment answers for everyone, billed to that one key. Share the link only with people you mean to pay for.
-- **Run the bridge on your own machine** and the hosted page will use it, which is the way to keep using a Claude Code / Gemini / Codex / Cursor subscription rather than a paid API. Start it with
-  `OFFERLY_ALLOWED_ORIGINS="https://your-app.vercel.app" node bridge.js`.
+- **Anything that runs on your own computer stays on your own computer.** Claude Code, Gemini CLI, Codex, Cursor, Ollama and LM Studio are offered only by a copy opened from `http://localhost:8787` — a hosted page lists API keys only and never reaches into the visitor's machine. To use your Claude Pro plan or a local model, run Offerly locally.
 
-The page picks between these by itself: it uses the deployment when the deployment can answer — on its own key or on yours — and only looks for a local bridge when neither can.
+A hosted page always uses the deployment it came from: on the deployment's key if it has one, otherwise on the key you paste, kept in your browser.
 
 ### Sending email from the hosted copy
 
@@ -215,19 +214,18 @@ The `OFFERLY_SMTP_*` variables, if you want the deployment itself to send:
 | `OFFERLY_SMTP_PASS` | your app password |
 | `OFFERLY_SMTP_FROM` / `OFFERLY_SMTP_FROM_NAME` | optional display address and name |
 
-A hosted backend deliberately ignores `offerly.mail.json` and `offerly.engines.json` even if a copy reaches the server, so a credential file left in a build can never be used or shown to visitors. Its `/api` endpoint also answers only pages served by that same deployment, so another website cannot spend your key. (The local bridge stays open on purpose — that is how a page hosted elsewhere reaches the agent on your machine.)
+A hosted backend deliberately ignores `offerly.mail.json` and `offerly.engines.json` even if a copy reaches the server, so a credential file left in a build can never be used or shown to visitors. Its `/api` endpoint also answers only pages served by that same deployment, so another website cannot spend your key. The local bridge is locked the same way: it answers only pages it served itself, plus any origin you list in `OFFERLY_ALLOWED_ORIGINS`.
 
 Serverless limits worth knowing:
 
 - **Function timeout** is 60s on Vercel's Hobby plan. A full analysis through a fast API model fits; a slow one may not. On Pro, raise `maxDuration` in `vercel.json` to 300 and set `OFFERLY_TIMEOUT_MS` to match.
 - **Request bodies** are capped at ~4.5 MB, so large screenshot batches should go through the local bridge.
-- **Agent CLIs cannot run** on serverless. They are shown as unavailable there, and the page says the prompt will run on your machine instead.
+- **Agent CLIs and local model servers cannot run** on serverless, so a hosted copy does not list them.
 
 ### Email & security notes
 
 - The email and URL-fetching endpoints only accept requests from `http://localhost:8787`, from the deployment's own pages, or from an origin you list in `OFFERLY_ALLOWED_ORIGINS`. The local bridge listens on `127.0.0.1` only, so other devices on your network can't use it.
-- To use bulk apply from a hosted copy (e.g. Vercel), start the bridge with
-  `OFFERLY_ALLOWED_ORIGINS="https://your-app.vercel.app" node bridge.js`.
+- Bulk apply works the same on a hosted copy: enter your SMTP login under **✉ Email setup** and it is kept in your browser.
 - Many sites (LinkedIn especially) require a login or JavaScript to show a job. If a link fails, use a screenshot or paste the text instead.
 - Screenshots are written to a temporary folder for Claude Code to read and deleted right after.
 

@@ -380,6 +380,17 @@ if (!SSO_ENABLED) {
   }
 }
 
+// A hosted deployment offers only what it can run itself: a provider's API, reached
+// with a key. Agent CLIs and "on this machine" servers such as LM Studio live on the
+// visitor's computer, which a serverless function can never reach — listing them
+// there only invited people to pick something that could not work.
+const LOCAL_ONLY = new Set(['lmstudio']);
+if (SERVERLESS) {
+  for (let i = ENGINES.length - 1; i >= 0; i--) {
+    if (ENGINES[i].kind === 'cli' || LOCAL_ONLY.has(ENGINES[i].id)) ENGINES.splice(i, 1);
+  }
+}
+
 const BY_ID = new Map(ENGINES.map(e => [e.id, e]));
 
 // --- stored configuration ---------------------------------------------------

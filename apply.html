@@ -333,15 +333,15 @@ async function checkBridge(){
   const dot=$('bridgeStatus'), note=$('bridgeNote');
   dot.style.display='inline-block';
 
-  /* Pick a backend. This site's own is right when it can answer by itself, and
-     also when this browser holds a key that makes it able to — that is how a
-     hosted copy works with nothing configured on the server. Only when neither
-     is true do we look for a bridge on the visitor's machine. */
+  /* A page always uses the server it came from. A hosted copy runs on a key — the
+     deployment's, or one kept in this browser — and never reaches into the
+     visitor's computer: agent CLIs and "on this machine" servers belong to a copy
+     opened from localhost. Only a page opened as a file looks for the local bridge. */
   let j=SELF?await probe(SELF):null;
   let base=SELF;
-  if(!j||(!j.ok&&!browserCanDrive(j))){
-    const local=await probe(LOCAL_BRIDGE);
-    if(local){j=local;base=LOCAL_BRIDGE;}
+  if(!SELF){
+    j=await probe(LOCAL_BRIDGE);
+    base=LOCAL_BRIDGE;
   }
   if(!j){
     BRIDGE=SELF||LOCAL_BRIDGE;
@@ -362,11 +362,14 @@ async function checkBridge(){
   renderEngines(j.engines,j.suggested||j.defaultEngine,j.canSave);
 
   const e=engineInfo();
-  if(engineUsable(e)){
+  if(engineUsable(e)&&testedOK(e.id)){
     dot.style.color='var(--green)';dot.title='Connected';
-    setNote('🟢 Connected — running on <b>'+e.label+'</b>'
-      +(REMOTE?' on your machine':'')
+    setNote('🟢 Connected — <b>'+e.label+'</b> answered a test'
       +(!e.available&&localCreds(e.id)?', with the key stored in this browser':'')+'.');
+    showErr('');
+  }else if(engineUsable(e)){
+    dot.style.color='var(--amber)';dot.title='Not tested';
+    setNote('🟡 <b>'+e.label+'</b> is set up but has not answered a test yet. Open ⚙ Engine and press <b>Connect</b>.');
     showErr('');
   }else{
     dot.style.color='var(--amber)';dot.title='Not connected';
@@ -510,6 +513,7 @@ async function connectEngine(){
   try{
     const j=await post('/api/engine-connect',{engine:id,model:$('model').value,values,remember:!keepLocal});
     if(j.ok===false){
+      setTested(id,false);
       /* Installed but signed out is the common case, and the CLI's own wording does
          not help anyone looking at a web page. */
       if(j.kind==='auth'&&e.login){
@@ -529,11 +533,13 @@ async function connectEngine(){
       const i=ENGINES.findIndex(x=>x.id===id);
       if(i>=0)ENGINES[i]=j.engineInfo;
     }
+    setTested(id,true);
     status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.';
     e.available=true;
     toast('Connected to '+e.label);
     checkBridge();
   }catch(err){
+    setTested(id,false);
     status.innerHTML='🔴 '+escapeHTMLish(err.message);
   }finally{
     btn.disabled=false;btn.textContent=was;
@@ -542,6 +548,7 @@ async function connectEngine(){
 async function forgetEngine(){
   const id=$('engine').value;
   setLocalCreds(id,null);
+  setTested(id,false);
   try{const info=await post('/api/engine-forget',{engine:id});
     const i=ENGINES.findIndex(x=>x.id===id);if(i>=0)ENGINES[i]=info;
   }catch(e){/* nothing stored server-side is fine */}
@@ -553,9 +560,11 @@ async function forgetEngine(){
    held in this browser. Readiness has to account for both. */
 let HOSTED_BACKEND=false;
 function engineUsable(e){return !!e&&(e.available||!!localCreds(e.id));}
-function browserCanDrive(j){
-  return (j.engines||[]).some(e=>e.kind==='api'&&!e.blocked&&localCreds(e.id));
-}
+/* "Connected" is only said after a real round trip, remembered per engine and per
+   backend. Shared with the job finder, which runs the same Connect test. */
+function testKey(id){return 'tested.'+id+'@'+BRIDGE;}
+function testedOK(id){try{return !!localStorage.getItem(testKey(id));}catch{return false;}}
+function setTested(id,ok){try{ok?localStorage.setItem(testKey(id),String(Date.now())):localStorage.removeItem(testKey(id));}catch{}}
 function setNote(html){const n=$('bridgeNote');if(n)n.innerHTML=html;}
 /* Signing in happens in the provider's own client: none of them allow a third-party
    page to run on a consumer subscription, so the bridge opens their official CLI's

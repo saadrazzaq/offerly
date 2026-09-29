@@ -479,15 +479,15 @@ async function checkBridge(){
   const dot=document.getElementById('bridgeStatus'), note=document.getElementById('bridgeNote');
   dot.style.display='inline-block';
 
-  /* Pick a backend. This site's own is right when it can answer by itself, and
-     also when this browser holds a key that makes it able to — that is how a
-     hosted copy works with nothing configured on the server. Only when neither
-     is true do we look for a bridge on the visitor's machine. */
+  /* A page always uses the server it came from. A hosted copy runs on a key — the
+     deployment's, or one kept in this browser — and never reaches into the
+     visitor's computer: agent CLIs and "on this machine" servers belong to a copy
+     opened from localhost. Only a page opened as a file looks for the local bridge. */
   let j=SELF?await probe(SELF):null;
   let base=SELF;
-  if(!j||(!j.ok&&!browserCanDrive(j))){
-    const local=await probe(LOCAL_BRIDGE);
-    if(local){j=local;base=LOCAL_BRIDGE;}
+  if(!SELF){
+    j=await probe(LOCAL_BRIDGE);
+    base=LOCAL_BRIDGE;
   }
   if(!j){
     BRIDGE=SELF||LOCAL_BRIDGE;
@@ -507,30 +507,17 @@ async function checkBridge(){
     +(HOSTED_BACKEND?' · hosted':' · local bridge')+' · '+(j.engines||[]).length+' engines';
   renderEngines(j.engines,j.suggested||j.defaultEngine,j.canSave);
 
-  /* The bridge answered /health, which any page may ask. Whether it will run
-     anything for this page is a separate question, and the answer decides the colour. */
-  if(REMOTE&&j.originAllowed!==true){
-    dot.style.color='var(--red)';dot.title='Bridge refuses this site';
-    const fix='Close the Offerly window on your computer and start it again with <b>start.cmd</b>'
-      +' — or run <code>OFFERLY_ALLOWED_ORIGINS='+escapeHTMLish(SELF)+' node bridge.js</code>.';
-    setNote('🔴 Offerly is running on your computer, but it does not allow <b>'+escapeHTMLish(SELF)+'</b> to use it. '+fix);
-    showErr('Offerly on your computer does not allow this site yet. Restart it with start.cmd, then reload this page.');
-    return;
-  }
-
   const e=engineInfo();
   if(engineUsable(e)&&testedOK(e.id)){
     dot.style.color='var(--green)';dot.title='Connected';
     setNote('🟢 Connected — <b>'+e.label+'</b> answered a test'
-      +(REMOTE?', running on your computer':'')
       +(!e.available&&localCreds(e.id)?', with the key stored in this browser':'')+'.');
     showErr('');
   }else if(engineUsable(e)){
     /* Settings being present is not the same as a model answering: a saved address
        can point at nothing, or at something that is not a model. */
     dot.style.color='var(--amber)';dot.title='Not tested';
-    setNote('🟡 <b>'+e.label+'</b> is set up'+(REMOTE?' on your computer':'')
-      +' but has not answered a test yet. Open ⚙ Engine and press <b>Connect</b>.');
+    setNote('🟡 <b>'+e.label+'</b> is set up but has not answered a test yet. Open ⚙ Engine and press <b>Connect</b>.');
     showErr('');
   }else{
     dot.style.color='var(--amber)';dot.title='Not connected';
@@ -727,9 +714,6 @@ function testKey(id){return 'tested.'+id+'@'+BRIDGE;}
 function testedOK(id){try{return !!localStorage.getItem(testKey(id));}catch{return false;}}
 function setTested(id,ok){try{ok?localStorage.setItem(testKey(id),String(Date.now())):localStorage.removeItem(testKey(id));}catch{}}
 function engineUsable(e){return !!e&&(e.available||!!localCreds(e.id));}
-function browserCanDrive(j){
-  return (j.engines||[]).some(e=>e.kind==='api'&&!e.blocked&&localCreds(e.id));
-}
 function setNote(html){const n=document.getElementById('bridgeNote');if(n)n.innerHTML=html;}
 /* Signing in happens in the provider's own client: none of them allow a third-party
    page to run on a consumer subscription, so the bridge opens their official CLI's
