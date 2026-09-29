@@ -767,8 +767,17 @@ async function run(prompt, engineId, model, images, override, opts = {}) {
 // Credentials are checked as given, so a bad key fails here rather than mid-analysis.
 async function test(engineId, model, override) {
   const started = Date.now();
-  const out = await run('Reply with exactly this word and nothing else: OFFERLY', engineId, model, [], override,
+  // A fresh code each time, and the reply must contain it. With a fixed word, a
+  // server that answers every prompt with that word — a stub, a mock, a proxy with
+  // a canned reply — passed the test and then "failed to parse" every analysis.
+  const code = 'OK' + Math.random().toString(36).slice(2, 7).toUpperCase();
+  const out = await run(`Reply with exactly this code and nothing else: ${code}`, engineId, model, [], override,
     { timeout: TEST_TIMEOUT_MS });
+  if (!out.text.toUpperCase().includes(code)) {
+    const said = out.text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    throw new Error(`The engine answered, but not to the prompt: asked to reply "${code}", it said "${said}". `
+      + 'Whatever is at this address is not a working model — check the base URL and that a model is loaded.');
+  }
   return {
     ok: true, engine: out.engine, model: out.model,
     reply: out.text.replace(/\s+/g, ' ').trim().slice(0, 120),

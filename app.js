@@ -240,11 +240,12 @@ function logResponse(model, prompt, text) {
 
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
-  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs']);
-// A hosted deployment may hold the owner's API key, so its AI endpoint must not be
-// callable from other websites. The local bridge deliberately stays open: that is how
-// a page hosted elsewhere reaches the agent on your machine.
-if (HOSTED) PROTECTED.add('/api');
+  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs',
+  // The AI endpoint runs prompts on your key or your signed-in Claude Code / Gemini /
+  // Codex account. Left open, any website you happened to visit while the bridge was
+  // running could spend it from your browser. A page hosted elsewhere that should
+  // reach your bridge is named in OFFERLY_ALLOWED_ORIGINS, like the other routes.
+  '/api']);
 
 // --- routes ----------------------------------------------------------------
 async function handle(req, res) {
