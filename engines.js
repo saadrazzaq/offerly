@@ -218,7 +218,7 @@ const ENGINES = [
     id: 'custom',
     label: 'Other agent (custom command)',
     kind: 'cli',
-    provider: 'other', providerLabel: 'Something else', auth: 'none',
+    provider: 'other', providerLabel: 'Any other OpenAI-compatible API', auth: 'none',
     authLabel: 'Custom command', authNote: 'Any CLI that reads a prompt on stdin.',
     note: 'Any CLI that reads a prompt on stdin and prints the answer.',
     install: 'Enter the command below and press Connect.',
@@ -290,7 +290,7 @@ const ENGINES = [
     id: 'openai-compatible',
     label: 'Other API (OpenAI-compatible)',
     kind: 'api',
-    provider: 'other', providerLabel: 'Something else', auth: 'key',
+    provider: 'other', providerLabel: 'Any other OpenAI-compatible API', auth: 'key',
     authLabel: 'Use an API key', authNote: 'OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM.',
     note: 'OpenRouter, Groq, Together, DeepSeek, Mistral, LM Studio, vLLM — anything speaking /chat/completions.',
     install: 'Enter the endpoint, key and model below, then press Connect.',
@@ -306,6 +306,68 @@ const ENGINES = [
     call: (o) => chatCompletions({ ...o, model: o.model || o.cfg.model, baseUrl: o.cfg.baseUrl, key: o.cfg.apiKey }),
   },
 ];
+
+// Most providers speak OpenAI's /chat/completions, so they differ only by endpoint,
+// key and model name. One definition each, rather than making someone look up a base
+// URL. Model ids move around, so the model is a field with an example rather than a
+// list this file would have to chase.
+function openAICompatible({ id, providerLabel, baseUrl, env, keyHint, modelHint, note, keyUrl, keyRequired = true }) {
+  const fields = [];
+  if (keyRequired) fields.push(KEY_FIELD(env, keyHint));
+  else fields.push({ key: 'apiKey', label: 'API key (optional)', type: 'password', env, secret: true, placeholder: keyHint });
+  fields.push({ key: 'model', label: 'Model', type: 'text', env: env + '_MODEL', required: true,
+    placeholder: modelHint, help: 'Exactly as the provider names it.' });
+  if (!baseUrl) {
+    fields.unshift({ key: 'baseUrl', label: 'Base URL', type: 'text', env: env + '_BASE_URL', required: true,
+      placeholder: 'https://example.com/v1', help: 'Ends in /v1 — Offerly appends /chat/completions.' });
+  }
+  return {
+    id, label: providerLabel, kind: 'api',
+    provider: id, providerLabel, auth: 'key',
+    authLabel: 'Use an API key', authNote: note,
+    note,
+    install: keyUrl ? `Create a key at ${keyUrl}, paste it below and press Connect.`
+                    : 'Enter the details below and press Connect.',
+    files: 'inline',
+    fields,
+    models: [{ value: '', label: 'The model entered above' }],
+    call: o => chatCompletions({
+      ...o, model: o.model || o.cfg.model,
+      baseUrl: baseUrl || o.cfg.baseUrl, key: o.cfg.apiKey || 'none',
+    }),
+  };
+}
+
+const EXTRA_PROVIDERS = [
+  openAICompatible({ id: 'openrouter', providerLabel: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1',
+    env: 'OPENROUTER_API_KEY', keyHint: 'sk-or-…', modelHint: 'anthropic/claude-sonnet-4.5',
+    keyUrl: 'openrouter.ai/keys',
+    note: 'One key, most models — Claude, GPT, Gemini, Llama and more, pay-per-token.' }),
+  openAICompatible({ id: 'groq', providerLabel: 'Groq', baseUrl: 'https://api.groq.com/openai/v1',
+    env: 'GROQ_API_KEY', keyHint: 'gsk_…', modelHint: 'llama-3.3-70b-versatile',
+    keyUrl: 'console.groq.com/keys', note: 'Very fast open models, with a free tier.' }),
+  openAICompatible({ id: 'deepseek', providerLabel: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1',
+    env: 'DEEPSEEK_API_KEY', keyHint: 'sk-…', modelHint: 'deepseek-chat',
+    keyUrl: 'platform.deepseek.com', note: 'Strong models at a low price per token.' }),
+  openAICompatible({ id: 'mistral', providerLabel: 'Mistral', baseUrl: 'https://api.mistral.ai/v1',
+    env: 'MISTRAL_API_KEY', keyHint: '…', modelHint: 'mistral-large-latest',
+    keyUrl: 'console.mistral.ai', note: 'European provider, pay-per-token.' }),
+  openAICompatible({ id: 'together', providerLabel: 'Together AI', baseUrl: 'https://api.together.xyz/v1',
+    env: 'TOGETHER_API_KEY', keyHint: '…', modelHint: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    keyUrl: 'api.together.ai/settings/api-keys', note: 'Hosted open models, pay-per-token.' }),
+  openAICompatible({ id: 'xai', providerLabel: 'xAI · Grok', baseUrl: 'https://api.x.ai/v1',
+    env: 'XAI_API_KEY', keyHint: 'xai-…', modelHint: 'grok-4',
+    keyUrl: 'console.x.ai', note: 'Grok models, pay-per-token.' }),
+  openAICompatible({ id: 'perplexity', providerLabel: 'Perplexity', baseUrl: 'https://api.perplexity.ai',
+    env: 'PERPLEXITY_API_KEY', keyHint: 'pplx-…', modelHint: 'sonar',
+    keyUrl: 'perplexity.ai/settings/api', note: 'Answers with live web search built in.' }),
+  openAICompatible({ id: 'lmstudio', providerLabel: 'LM Studio / vLLM · on this machine',
+    baseUrl: '', env: 'OFFERLY_LOCAL', keyHint: 'usually blank', modelHint: 'the model you loaded',
+    keyRequired: false,
+    note: 'Any server you run yourself. LM Studio listens on http://localhost:1234/v1.' }),
+];
+
+ENGINES.push(...EXTRA_PROVIDERS);
 
 const BY_ID = new Map(ENGINES.map(e => [e.id, e]));
 
@@ -461,9 +523,11 @@ function getEngine(id, override) {
 // Only models we published for that engine, so nothing user-supplied reaches argv.
 function pickModel(e, model, cfg) {
   const want = String(model || '').replace(/-\d{8}$/, ''); // dated id saved by an older build
-  // These two take their model from a text field, so that wins over the dropdown.
-  if (e.id === 'openai-compatible') return cfg.model || want;
+  // Ollama keeps a list and a field: a pick from the list wins, the field is the
+  // fallback for a model that is not on it.
   if (e.id === 'ollama') return /^[\w.:\/-]{1,120}$/.test(want) ? want : (cfg.model || e.models[0].value);
+  // Every other engine that names its model in a text field takes it from there.
+  if ((e.fields || []).some(f => f.key === 'model')) return want || cfg.model || '';
   if (e.models.some(m => m.value === want)) return want;
   return e.models[0].value;
 }

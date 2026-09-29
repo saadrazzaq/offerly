@@ -9,6 +9,9 @@ const path = require('path');
 const engines = require('./engines');
 const jobfeeds = require('./jobfeeds');
 
+let VERSION = '';
+try { VERSION = require('./package.json').version; } catch (_) {}
+
 const PORT = Number(process.env.PORT) || 8787;
 const HERE = __dirname;
 const HOSTED = !!process.env.VERCEL; // running as a Vercel function, not as the local bridge
@@ -215,10 +218,16 @@ function sendJSON(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(obj));
 }
+// The pages are the app: served with no-store so a reload always picks up the
+// current build. Without this a browser caches the HTML heuristically and an
+// update appears to have changed nothing.
 function servePage(res, file) {
   fs.readFile(path.join(HERE, file), (e, data) => {
     if (e) { res.writeHead(500); return res.end(file + ' not found'); }
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store, must-revalidate',
+    });
     res.end(data);
   });
 }
@@ -276,6 +285,7 @@ async function handle(req, res) {
       // that is the first engine a visitor could enable with a key of their own.
       suggested: engines.defaultEngine() || (list.find(e => e.kind === 'api' && !e.blocked) || {}).id || null,
       hosted: engines.SERVERLESS,
+      version: VERSION,
       canSave: !engines.SERVERLESS, // a serverless deployment has no writable disk
     });
   }

@@ -30,24 +30,20 @@ Fill in whatever the chosen path asks for and press **Connect** — Offerly send
 
 Each engine declares what it needs, so the form changes with your choice: an API key for a provider, a base URL and model for a custom endpoint, an optional binary path for a CLI that is not on `PATH`, or the command line for any other agent.
 
-| Engine | How it bills | What you need |
-|--------|--------------|---------------|
-| **Claude Code** | your Claude subscription | the VS Code extension or CLI, signed in (auto-detected) |
-| **Gemini CLI** | your Google account | `npm i -g @google/gemini-cli`, then run `gemini` once |
-| **OpenAI Codex CLI** | your ChatGPT plan | `npm i -g @openai/codex`, then run `codex` once |
-| **Cursor CLI** | your Cursor subscription | Cursor installed, `cursor-agent login` |
-| **Ollama** | free, fully offline | Ollama + a pulled model (`ollama pull llama3.1`) |
-| **Other agent** | whatever it uses | any CLI that reads a prompt on stdin — give it the command |
-| **OpenAI / Anthropic / Gemini API** | pay-per-token | paste an API key |
-| **Any OpenAI-compatible API** | pay-per-token | OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM — base URL, key and model |
+| Provider | Sign in | API key |
+|----------|:-------:|:-------:|
+| **Claude** · Anthropic | ✅ your Claude Pro / Max plan | ✅ |
+| **ChatGPT** · OpenAI | ✅ your Plus / Pro plan | ✅ |
+| **Gemini** · Google | ✅ your Google account | ✅ |
+| **Cursor** | ✅ your Cursor subscription | — |
+| **Ollama** — on your machine | neither: free and offline | — |
+| **OpenRouter** — most models behind one key | — | ✅ |
+| **Groq** · **DeepSeek** · **Mistral** · **Together AI** · **xAI Grok** · **Perplexity** | — | ✅ |
+| **LM Studio / vLLM** — a server you run | — | optional |
+| **Any other OpenAI-compatible API** | — | ✅ |
+| **Any other agent** — a CLI that reads stdin | — | — |
 
-### How the sign-in path works
-
-No provider lets a third-party page run on a consumer subscription — Anthropic's terms restrict Free/Pro/Max OAuth tokens to Claude Code and claude.ai, "Sign in with ChatGPT" grants identity but not model usage on your plan, and Gemini needs an API key or a Vertex project. So the sign-in happens in the vendor's own client, which is what makes a subscription work here at all.
-
-Press **Sign in with Claude / ChatGPT / Google / Cursor** in ⚙ Engine and the bridge opens that CLI's own login (`claude auth login`, `codex login`, `gemini`, `cursor-agent login`) in a terminal. Finish it there, come back and press **Connect**. For Claude Code the panel also shows who is signed in and on which plan, read straight from `claude auth status`.
-
-This only works on the local bridge: a hosted deployment has no terminal to open, so there an API key is the way in.
+The sign-in column needs that vendor's CLI installed, since the login runs through it; the panel shows the one-line install command when it is missing. Every API-key provider already knows its own endpoint — you supply a key and a model name, nothing else.
 
 ### Where your keys are kept
 

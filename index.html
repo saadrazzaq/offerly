@@ -333,6 +333,7 @@
       <button class="ghost" onclick="saveSettings()">Use without testing</button>
     </div>
     <p class="note" id="bridgeNote" style="margin-top:12px">Checking connection…</p>
+    <p class="note" id="buildStamp" style="opacity:.55;margin-top:4px"></p>
   </div>
 </div>
 
@@ -482,6 +483,9 @@ async function checkBridge(){
   BRIDGE=base||LOCAL_BRIDGE;
   REMOTE=!!(SELF&&BRIDGE!==SELF);
   HOSTED_BACKEND=!!j.hosted;
+  const stamp=$('buildStamp');
+  if(stamp)stamp.textContent='Offerly '+(j.version?'v'+j.version:'')
+    +(HOSTED_BACKEND?' · hosted':' · local bridge')+' · '+(j.engines||[]).length+' engines';
   renderEngines(j.engines,j.suggested||j.defaultEngine,j.canSave);
 
   const e=engineInfo();
@@ -700,8 +704,11 @@ async function refreshAuth(id){
 function providerList(){
   const out=[];
   ENGINES.forEach(e=>{
-    let g=out.find(x=>x.id===e.provider);
-    if(!g){g={id:e.provider,label:e.providerLabel||e.provider,options:[]};out.push(g);}
+    /* An older bridge reports engines with no provider. Falling back to the engine's
+       own id keeps every choice visible instead of collapsing them into one. */
+    const pid=e.provider||e.id;
+    let g=out.find(x=>x.id===pid);
+    if(!g){g={id:pid,label:e.providerLabel||e.label||pid,options:[]};out.push(g);}
     g.options.push(e);
   });
   return out;
