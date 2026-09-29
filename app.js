@@ -231,7 +231,7 @@ function logResponse(model, prompt, text) {
 
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
-  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/jobs']);
+  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs']);
 // A hosted deployment may hold the owner's API key, so its AI endpoint must not be
 // callable from other websites. The local bridge deliberately stays open: that is how
 // a page hosted elsewhere reaches the agent on your machine.
@@ -295,6 +295,22 @@ async function handle(req, res) {
       return sendJSON(res, 200, engines.forgetConfig(engine));
     }
 
+    // Who is signed in to a CLI, asked of the CLI itself. Cheap, so the page can
+    // show it without spending a model request.
+    if (req.method === 'POST' && url === '/api/engine-auth') {
+      const { engine } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      return sendJSON(res, 200, { status: await engines.authStatus(engine) });
+    }
+
+    // Open the provider's own sign-in. No provider lets a third-party page run on a
+    // consumer subscription, so the only honest route is their official CLI's flow.
+    if (req.method === 'POST' && url === '/api/engine-login') {
+      const { engine } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      return sendJSON(res, 200, engines.startLogin(engine));
+    }
+
     // The Connect button: save first (unless the page is keeping the key itself),
     // then prove the engine answers before anyone waits on a real analysis.
     if (req.method === 'POST' && url === '/api/engine-connect') {
@@ -303,7 +319,15 @@ async function handle(req, res) {
       if (remember !== false && !engines.SERVERLESS && values && Object.keys(values).length) {
         engines.saveConfig(engine, values);
       }
-      const result = await engines.test(engine, model, values || null);
+      let result;
+      try {
+        result = await engines.test(engine, model, values || null);
+      } catch (ex) {
+        return sendJSON(res, 200, {
+          ok: false, error: ex.message, kind: engines.classifyFailure(ex.message),
+          engineInfo: engines.describe(engines.BY_ID.get(engine)),
+        });
+      }
       return sendJSON(res, 200, { ...result, engineInfo: engines.describe(engines.BY_ID.get(engine)) });
     }
 

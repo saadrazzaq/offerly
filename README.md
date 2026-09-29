@@ -32,6 +32,14 @@ Each engine declares what it needs, so the form changes with your choice: an API
 | **OpenAI / Anthropic / Gemini API** | pay-per-token | paste an API key |
 | **Any OpenAI-compatible API** | pay-per-token | OpenRouter, Groq, Together, DeepSeek, LM Studio, vLLM — base URL, key and model |
 
+### Signing in to a CLI engine
+
+No provider lets a third-party page run on a consumer subscription — Anthropic's terms restrict Free/Pro/Max OAuth tokens to Claude Code and claude.ai, "Sign in with ChatGPT" grants identity but not model usage on your plan, and Gemini needs an API key or a Vertex project. So the sign-in happens in the vendor's own client, which is what makes a subscription work here at all.
+
+Press **Sign in with Claude / ChatGPT / Google / Cursor** in ⚙ Engine and the bridge opens that CLI's own login (`claude auth login`, `codex login`, `gemini`, `cursor-agent login`) in a terminal. Finish it there, come back and press **Connect**. For Claude Code the panel also shows who is signed in and on which plan, read straight from `claude auth status`.
+
+This only works on the local bridge: a hosted deployment has no terminal to open, so there an API key is the way in.
+
 ### Where your keys are kept
 
 A key you enter is saved to **`offerly.engines.json`** in the project folder, readable only by you and gitignored — the same arrangement as the SMTP password in `offerly.mail.json`. It is never sent back to the page: the form only reports that a key is set.

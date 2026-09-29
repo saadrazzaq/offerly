@@ -255,6 +255,7 @@
     </p>
     <p class="hint" id="engineStatus"></p>
     <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="ghost" id="engineLogin" style="display:none" onclick="loginEngine()">Sign in</button>
       <button class="cta" id="engineConnect" style="flex:1" onclick="connectEngine()">Connect</button>
       <button class="btn" id="engineForget" onclick="forgetEngine()">Clear</button>
       <button class="btn" onclick="saveSettings()">Use without testing</button>
@@ -442,7 +443,14 @@ function renderEngineDetail(id){
     const saved=localStorage.getItem('model.'+id);
     if(saved!==null&&e.models.some(m=>m.value===saved))msel.value=saved;
   }
+  const loginBtn=$('engineLogin');
+  if(loginBtn){
+    const canLogin=!!(e&&e.login);
+    loginBtn.style.display=canLogin?'':'none';
+    if(canLogin)loginBtn.textContent=e.login.label;
+  }
   setConnectState(e);
+  refreshAuth(id);
 }
 function setConnectState(e){
   const s=$('engineStatus');
@@ -467,6 +475,18 @@ async function connectEngine(){
   status.innerHTML='⏳ Asking '+e.label+' to answer once — this can take a minute for a CLI agent.';
   try{
     const j=await post('/api/engine-connect',{engine:id,model:$('model').value,values,remember:!keepLocal});
+    if(j.ok===false){
+      /* Installed but signed out is the common case, and the CLI's own wording does
+         not help anyone looking at a web page. */
+      if(j.kind==='auth'&&e.login){
+        status.innerHTML='🔑 '+escapeHTMLish(e.label)+' is installed but not signed in. '
+          +'Press <b>'+escapeHTMLish(e.login.label)+'</b> above, finish in the window that opens, then Connect again.';
+      }else{
+        status.innerHTML='🔴 '+escapeHTMLish(j.error||'Could not connect.');
+      }
+      if(j.engineInfo){const k=ENGINES.findIndex(x=>x.id===id);if(k>=0)ENGINES[k]=j.engineInfo;}
+      return;
+    }
     if(keepLocal&&e.fields.some(f=>f.secret&&values[f.key]))setLocalCreds(id,values);
     else setLocalCreds(id,null);
     localStorage.setItem('engine',id);
@@ -503,6 +523,44 @@ function browserCanDrive(j){
   return (j.engines||[]).some(e=>e.kind==='api'&&!e.blocked&&localCreds(e.id));
 }
 function setNote(html){const n=$('bridgeNote');if(n)n.innerHTML=html;}
+/* Signing in happens in the provider's own client: none of them allow a third-party
+   page to run on a consumer subscription, so the bridge opens their official CLI's
+   login flow in a terminal and the person finishes it there. */
+async function loginEngine(){
+  const id=$('engine').value, e=engineInfo(id), status=$('engineStatus');
+  if(!e||!e.login)return;
+  const btn=$('engineLogin'), was=btn.textContent;
+  btn.disabled=true;btn.textContent='Opening…';
+  try{
+    const j=await post('/api/engine-login',{engine:id});
+    status.innerHTML='🪟 '+escapeHTMLish(j.hint||'Finish the sign-in in the window that just opened.')
+      +' Then come back and press <b>Connect</b>.';
+    /* The terminal stays open while they sign in, so look again shortly after. */
+    setTimeout(()=>refreshAuth(id),15000);
+  }catch(err){
+    status.innerHTML='🔴 '+escapeHTMLish(err.message);
+  }finally{
+    btn.disabled=false;btn.textContent=was;
+  }
+}
+/* Ask the CLI who is signed in. Costs nothing, so it runs whenever the picker
+   changes to an engine that can answer. */
+async function refreshAuth(id){
+  const e=engineInfo(id), status=$('engineStatus');
+  if(!e||!e.canCheckAuth)return;
+  try{
+    const j=await post('/api/engine-auth',{engine:id});
+    const a=j.status;
+    if(!a)return;
+    e.signedIn=a.loggedIn;e.account=a.account;e.plan=a.plan;
+    if(a.loggedIn){
+      status.innerHTML='🟢 Signed in'+(a.account?' as <b>'+escapeHTMLish(a.account)+'</b>':'')
+        +(a.plan?' · '+escapeHTMLish(a.plan.toUpperCase()):'')+'. Press <b>Connect</b> to check it end to end.';
+    }else if(e.login){
+      status.innerHTML='🔑 Installed, but not signed in. Press <b>'+escapeHTMLish(e.login.label)+'</b>.';
+    }
+  }catch(_){/* the picker still works without this */}
+}
 function listJoin(a){return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
 function escapeHTMLish(t){const d=document.createElement('div');d.textContent=String(t);return d.innerHTML;}
 

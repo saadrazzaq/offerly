@@ -94,6 +94,17 @@ const ENGINES = [
     find: findClaudeInVSCode,
     note: 'Billed to your Claude Code subscription — no API key or credits.',
     install: 'Install the Claude Code VS Code extension or CLI and sign in, then press Connect.',
+    login: { args: ['auth', 'login'], label: 'Sign in with Claude',
+      hint: 'Claude Code opens its own browser sign-in. Use the account your Claude Pro or Max plan is on.' },
+    // `claude auth status` prints JSON and costs nothing, so the page can show who
+    // is signed in without spending a request on the model.
+    authStatus: {
+      args: ['auth', 'status'],
+      parse: out => {
+        const j = JSON.parse(out);
+        return { loggedIn: !!j.loggedIn, account: j.email || '', plan: j.subscriptionType || '' };
+      },
+    },
     files: true,
     fields: [BIN_FIELD('CLAUDE_BIN', 'C:\\path\\to\\claude.exe')],
     models: [
@@ -115,6 +126,8 @@ const ENGINES = [
     bins: ['gemini'],
     note: 'Uses your Google account / Gemini CLI login.',
     install: 'npm i -g @google/gemini-cli   then run `gemini` once to sign in.',
+    login: { args: [], label: 'Sign in with Google',
+      hint: 'Gemini CLI opens a Google sign-in in your browser on first run.' },
     files: true,
     fields: [BIN_FIELD('GEMINI_BIN', 'gemini')],
     models: [
@@ -131,6 +144,8 @@ const ENGINES = [
     bins: ['codex'],
     note: 'Uses your ChatGPT / Codex CLI login.',
     install: 'npm i -g @openai/codex   then run `codex` once to sign in.',
+    login: { args: ['login'], label: 'Sign in with ChatGPT',
+      hint: 'Codex CLI opens the ChatGPT sign-in in your browser. Use the account your Plus or Pro plan is on.' },
     files: true,
     fields: [BIN_FIELD('CODEX_BIN', 'codex')],
     models: [
@@ -154,6 +169,8 @@ const ENGINES = [
     bins: ['cursor-agent', 'cursor'],
     note: 'Uses your Cursor subscription.',
     install: 'Install Cursor and run `cursor-agent login`.',
+    login: { args: ['login'], label: 'Sign in with Cursor',
+      hint: 'Cursor opens its own sign-in in your browser.' },
     files: true,
     fields: [BIN_FIELD('CURSOR_BIN', 'cursor-agent')],
     models: [
@@ -384,6 +401,9 @@ function describe(e) {
     available: e.available, blocked: e.blocked || '', missing: e.missing || [],
     detected: e.kind === 'cli' ? !!e.bin : undefined,
     supportsImages: !!e.files,
+    // Only meaningful once the binary is present: signing in needs something to run.
+    login: e.login && e.bin && !SERVERLESS ? { label: e.login.label, hint: e.login.hint } : null,
+    canCheckAuth: !!(e.authStatus && e.bin && !SERVERLESS),
     models,
     fields: (e.fields || []).map(f => ({
       key: f.key, label: f.label, type: f.type, placeholder: f.placeholder || '',
@@ -424,6 +444,76 @@ function pickModel(e, model, cfg) {
   if (e.id === 'ollama') return /^[\w.:\/-]{1,120}$/.test(want) ? want : (cfg.model || e.models[0].value);
   if (e.models.some(m => m.value === want)) return want;
   return e.models[0].value;
+}
+
+// An agent CLI that is installed but signed out fails with its own wording, and the
+// raw text is no help to someone looking at a web page. Recognising it lets the page
+// offer the sign-in rather than just reporting that something went wrong.
+const AUTH_RE = /\b(not (?:logged|signed) in|please (?:log|sign) ?in|log ?in required|authenticat\w*(?: (?:failed|required|error))?|unauthori[sz]ed|invalid api key|expired (?:token|credential|session)|no credentials|run `?\w+ login)\b|\b401\b/i;
+function classifyFailure(message) {
+  const m = String(message || '');
+  if (AUTH_RE.test(m)) return 'auth';
+  if (/\b(enoent|not found on this machine|could not start)\b/i.test(m)) return 'missing';
+  return 'other';
+}
+
+// Starting a sign-in means opening a terminal the person can interact with: these
+// flows print a URL and wait. Nothing from the request reaches the command line —
+// the binary comes from what is already configured, the arguments from the registry
+// above — so a page cannot use this to run something of its own choosing.
+function startLogin(id) {
+  if (SERVERLESS) throw new Error('Signing in to an agent CLI only works on a local Offerly bridge, not on a hosted deployment.');
+  const e = BY_ID.get(id);
+  if (!e) throw new Error('Unknown engine: ' + id);
+  if (!e.login) throw new Error(`${e.label} has no sign-in of its own.`);
+  const cfg = cfgOf(e);
+  const bin = (cfg.bin && (fs.existsSync(cfg.bin) ? cfg.bin : which([cfg.bin])))
+    || (e.find ? e.find() : null) || (e.bins ? which(e.bins) : null);
+  if (!bin) throw new Error(`${e.label} is not installed yet. ${e.install}`);
+
+  const args = e.login.args;
+  let child;
+  if (process.platform === 'win32') {
+    // `start` reads the first quoted token as the window title, so give it one.
+    const inner = [bin, ...args].map(a => `"${a}"`).join(' ');
+    const line = `start "Offerly sign-in" cmd /k ${inner}`;
+    child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', line],
+      { windowsVerbatimArguments: true, detached: true, stdio: 'ignore' });
+  } else if (process.platform === 'darwin') {
+    const cmd = [bin, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+    child = spawn('osascript', ['-e', `tell application "Terminal" to do script "${cmd.replace(/"/g, '\\"')}"`,
+      '-e', 'tell application "Terminal" to activate'], { detached: true, stdio: 'ignore' });
+  } else {
+    const term = which(['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm']);
+    if (!term) throw new Error(`Could not find a terminal to open. Run this yourself:  ${[bin, ...args].join(' ')}`);
+    child = spawn(term, ['-e', bin, ...args], { detached: true, stdio: 'ignore' });
+  }
+  child.unref();
+  return { ok: true, label: e.login.label, hint: e.login.hint, command: [bin, ...args].join(' ') };
+}
+
+// Some CLIs can say who is signed in without doing any work. Only Claude Code's
+// output format is verified here; for the rest the page falls back to classifying
+// whatever Connect fails with.
+function authStatus(id) {
+  return new Promise(resolve => {
+    const e = BY_ID.get(id);
+    if (!e || !e.authStatus || SERVERLESS) return resolve(null);
+    const cfg = cfgOf(e);
+    const bin = (cfg.bin && (fs.existsSync(cfg.bin) ? cfg.bin : which([cfg.bin])))
+      || (e.find ? e.find() : null) || (e.bins ? which(e.bins) : null);
+    if (!bin) return resolve(null);
+    const child = spawnAgent(bin, e.authStatus.args, {});
+    let out = '';
+    const timer = setTimeout(() => { child.kill(); resolve(null); }, 20000);
+    child.stdout.on('data', d => out += d.toString('utf8'));
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', () => {
+      clearTimeout(timer);
+      try { resolve(e.authStatus.parse(out.trim())); } catch (_) { resolve(null); }
+    });
+    child.stdin.end();
+  });
 }
 
 // --- running a CLI engine ---------------------------------------------------
@@ -591,5 +681,5 @@ async function test(engineId, model, override) {
 
 module.exports = {
   run, test, listEngines, describe, defaultEngine, refresh, getEngine,
-  saveConfig, forgetConfig, BY_ID, CFG_FILE, SERVERLESS,
+  saveConfig, forgetConfig, startLogin, authStatus, classifyFailure, BY_ID, CFG_FILE, SERVERLESS,
 };
