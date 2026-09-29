@@ -15,8 +15,9 @@ http.createServer(handle).listen(PORT, '127.0.0.1', () => {
     console.log('  → agents       ' + ready.map(e => (e.id === def ? '* ' : '') + e.label).join(', '));
     console.log('                 (* = default — change it in ⚙ Engine, or set OFFERLY_ENGINE)');
   } else {
-    console.log('  → agents       NONE FOUND. Install Claude Code, Gemini CLI, Codex or Cursor,');
-    console.log('                 or set OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY.');
+    console.log('  → agents       NONE CONNECTED. Open ⚙ Engine in the page, pick a provider and');
+    console.log('                 paste its API key — or set OPENAI_API_KEY / ANTHROPIC_API_KEY /');
+    console.log('                 GEMINI_API_KEY here before starting.');
   }
   console.log('  → email        ' + (publicMailCfg(loadMailCfg()).configured ? 'ready (' + loadMailCfg().user + ')' : 'not set up yet') + '\n');
 });

@@ -770,6 +770,10 @@ function renderAuthModes(preferId){
     ||g.options.find(e=>e.auth===savedMode)
     ||g.options[0];
   box.innerHTML='';
+  /* With one way in, a row of one button is just noise: the note says it already. */
+  box.style.display=g.options.length>1?'':'none';
+  const row=$('authModeField');
+  if(row)row.querySelector('.lab').style.display=g.options.length>1?'':'none';
   g.options.forEach(e=>{
     const b=document.createElement('button');
     b.type='button';b.className='btn'+(e.id===chosen.id?' send':'');

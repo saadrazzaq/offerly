@@ -30,32 +30,28 @@ Fill in whatever the chosen path asks for and press **Connect** — Offerly send
 
 Each engine declares what it needs, so the form changes with your choice: an API key for a provider, a base URL and model for a custom endpoint, an optional binary path for a CLI that is not on `PATH`, or the command line for any other agent.
 
-| Provider | Sign in | API key |
-|----------|:-------:|:-------:|
-| **Claude** · Anthropic | ✅ your Claude Pro / Max plan | ✅ |
-| **ChatGPT** · OpenAI | ✅ your Plus / Pro plan | ✅ |
-| **Gemini** · Google | ✅ your Google account | ✅ |
-| **Cursor** | ✅ your Cursor subscription | — |
-| **Ollama** — on your machine | neither: free and offline | — |
-| **OpenRouter** — most models behind one key | — | ✅ |
-| **Groq** · **DeepSeek** · **Mistral** · **Together AI** · **xAI Grok** · **Perplexity** | — | ✅ |
-| **LM Studio / vLLM** — a server you run | — | optional |
-| **Any other OpenAI-compatible API** | — | ✅ |
-| **Any other agent** — a CLI that reads stdin | — | — |
+| Provider | What you need |
+|----------|---------------|
+| **Claude** · Anthropic | an Anthropic API key |
+| **ChatGPT** · OpenAI | an OpenAI API key |
+| **Gemini** · Google | a Google AI Studio key (has a free tier) |
+| **OpenRouter** | one key, most models behind it |
+| **Groq** · **DeepSeek** · **Mistral** · **Together AI** · **xAI Grok** · **Perplexity** | that provider's key |
+| **LM Studio / vLLM** | a server you run yourself; key usually blank |
+| **Any other OpenAI-compatible API** | base URL, key and model |
 
-### What “Sign in” does
+Each one already knows its own endpoint: you supply a key and, where the provider needs it, a model name. Press **Connect** and Offerly sends one short prompt to prove the key works before you wait on a full analysis.
 
-Press it and **that provider’s own login opens in your browser** — the same page you would see signing in to them directly. Finish there, come back, press **Connect**. Offerly never sees your password and never handles the token: it stays where that vendor put it.
+### Why there is no “sign in with Claude”
 
-The login is launched through the vendor’s official CLI, because that is the only route any of them permit to a consumer plan:
+Because none of them sell that. A chat subscription — Claude Pro, ChatGPT Plus, Gemini Advanced, SuperGrok — licenses **their** app, not API access, and there is no OAuth scope anywhere that lets another program spend it:
 
 - **Anthropic** restricts Free, Pro and Max OAuth tokens to Claude Code and claude.ai, and enforces it server-side.
-- **“Sign in with ChatGPT”** grants identity, not model usage on your plan.
-- **Gemini** needs an API key or a Vertex project; a Google sign-in alone will not do it.
+- **“Sign in with ChatGPT”** exists but grants identity only — who you are, not the right to run a model on your plan.
+- **Google** sign-in likewise: Gemini inference needs an API key, or a Vertex project you pay for yourself.
+- **xAI** has no consumer sign-in for inference at all.
 
-So a browser-only “log in and we use your subscription” is not something any app can offer, Offerly included. Offerly finds the CLI by itself and asks you for nothing; when it is missing, the panel shows the one-line install command rather than a file picker. For Claude Code it also reports who is signed in and on which plan, read from `claude auth status`.
-
-Every API-key provider already knows its own endpoint — you supply a key and a model name, nothing else.
+Earlier versions offered a sign-in that worked by launching each vendor's own CLI, the one client they do license for subscription use. It only worked if you had that CLI installed, so it was never available to everyone, and a hosted copy could never offer it. The adapters are still in `engines.js`: run the bridge with `OFFERLY_ENABLE_SSO=1` to bring them back for yourself.
 
 ### Where your keys are kept
 

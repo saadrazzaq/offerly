@@ -369,6 +369,17 @@ const EXTRA_PROVIDERS = [
 
 ENGINES.push(...EXTRA_PROVIDERS);
 
+// Signing in to a provider needs that vendor's own CLI on the machine, which a
+// hosted visitor does not have and most people will not install. Offering it made
+// the panel look broken for everyone it could not serve, so an API key is the one
+// way in. The adapters are still here: set OFFERLY_ENABLE_SSO=1 to offer them again.
+const SSO_ENABLED = process.env.OFFERLY_ENABLE_SSO === '1';
+if (!SSO_ENABLED) {
+  for (let i = ENGINES.length - 1; i >= 0; i--) {
+    if (ENGINES[i].auth !== 'key') ENGINES.splice(i, 1);
+  }
+}
+
 const BY_ID = new Map(ENGINES.map(e => [e.id, e]));
 
 // --- stored configuration ---------------------------------------------------
@@ -766,6 +777,7 @@ async function test(engineId, model, override) {
 }
 
 module.exports = {
+  SSO_ENABLED,
   run, test, listEngines, describe, defaultEngine, refresh, getEngine,
   saveConfig, forgetConfig, startLogin, authStatus, classifyFailure, BY_ID, CFG_FILE, SERVERLESS,
 };
