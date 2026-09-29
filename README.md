@@ -43,7 +43,19 @@ Each engine declares what it needs, so the form changes with your choice: an API
 | **Any other OpenAI-compatible API** | — | ✅ |
 | **Any other agent** — a CLI that reads stdin | — | — |
 
-The sign-in column needs that vendor's CLI installed, since the login runs through it; the panel shows the one-line install command when it is missing. Every API-key provider already knows its own endpoint — you supply a key and a model name, nothing else.
+### What “Sign in” does
+
+Press it and **that provider’s own login opens in your browser** — the same page you would see signing in to them directly. Finish there, come back, press **Connect**. Offerly never sees your password and never handles the token: it stays where that vendor put it.
+
+The login is launched through the vendor’s official CLI, because that is the only route any of them permit to a consumer plan:
+
+- **Anthropic** restricts Free, Pro and Max OAuth tokens to Claude Code and claude.ai, and enforces it server-side.
+- **“Sign in with ChatGPT”** grants identity, not model usage on your plan.
+- **Gemini** needs an API key or a Vertex project; a Google sign-in alone will not do it.
+
+So a browser-only “log in and we use your subscription” is not something any app can offer, Offerly included. Offerly finds the CLI by itself and asks you for nothing; when it is missing, the panel shows the one-line install command rather than a file picker. For Claude Code it also reports who is signed in and on which plan, read from `claude auth status`.
+
+Every API-key provider already knows its own endpoint — you supply a key and a model name, nothing else.
 
 ### Where your keys are kept
 

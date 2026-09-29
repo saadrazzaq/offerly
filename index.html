@@ -545,7 +545,12 @@ function renderEngineDetail(id){
   if(box){
     box.innerHTML='';
     const held=localCreds(id)||{};
-    (e?e.fields:[]).forEach(f=>{
+    /* Where the command already was found, asking for its path is noise. It appears
+       only when detection failed, or when someone opens Advanced to override it. */
+    const detected=!!(e&&e.detected);
+    const showAdvanced=ADVANCED_OPEN[id]||false;
+    const visible=(e?e.fields:[]).filter(f=>f.key!=='bin'||showAdvanced);
+    visible.forEach(f=>{
       const wrap=document.createElement('div');
       wrap.className='field';
       const lab=document.createElement('label');
@@ -566,6 +571,19 @@ function renderEngineDetail(id){
       if(hint.textContent)wrap.appendChild(hint);
       box.appendChild(wrap);
     });
+    /* Say plainly that nothing is needed here, and offer the override quietly. */
+    if(e&&e.kind==='cli'){
+      const row=document.createElement('p');
+      row.className='note';
+      row.innerHTML=(detected
+          ? '\u2713 Found on this machine \u2014 nothing to fill in here. '
+          : '\u26a0 Not installed yet. Run <code>'+esc(e.install||'')+'</code><br>')
+        +'<a href="#" id="advToggle" style="color:var(--acc,#7aa2ff)">'
+        +(showAdvanced?'Hide':(detected?'It is somewhere else\u2026':'Already installed? Point Offerly at it\u2026'))+'</a>';
+      box.appendChild(row);
+      const t=row.querySelector('#advToggle');
+      if(t)t.onclick=ev=>{ev.preventDefault();ADVANCED_OPEN[id]=!showAdvanced;renderEngineDetail(id);};
+    }
     const hasSecret=!!(e&&e.fields&&e.fields.some(f=>f.secret));
     const rememberRow=$('engineRemember');
     if(rememberRow)rememberRow.style.display=(hasSecret&&CAN_SAVE)?'':'none';
@@ -582,9 +600,15 @@ function renderEngineDetail(id){
   }
   const loginBtn=$('engineLogin');
   if(loginBtn){
-    const canLogin=!!(e&&e.login);
+    /* The button is shown for any provider that has a sign-in, even before its
+       command is installed: hiding it made the option look unavailable. */
+    const canLogin=!!(e&&e.auth==='sso');
     loginBtn.style.display=canLogin?'':'none';
-    if(canLogin)loginBtn.textContent=e.login.label;
+    if(canLogin){
+      loginBtn.textContent=(e.login?e.login.label:(e.authLabel||'Sign in'));
+      loginBtn.disabled=!e.login;      // no command to launch yet
+      loginBtn.title=e.login?'Opens the provider\u2019s own login in your browser':e.install||'';
+    }
   }
   setConnectState(e);
   refreshAuth(id);
@@ -701,6 +725,7 @@ async function refreshAuth(id){
 /* ⚙ Engine offers a provider, then the ways that provider can be connected:
    sign in with your own account, or paste an API key. Both end up selecting one of
    the engines the backend reported, so everything downstream is unchanged. */
+const ADVANCED_OPEN={};
 function providerList(){
   const out=[];
   ENGINES.forEach(e=>{
