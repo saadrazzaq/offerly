@@ -9,6 +9,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="resumeformat.js"></script>
+<script src="atsscore.js"></script>
 <style>
   :root{
     --bg:#0b0f17; --bg2:#111827; --card:#151c2c; --card2:#1b2436;
@@ -87,8 +89,13 @@
   /* settings drawer */
   .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;overflow:auto}
   .modal.show{display:flex}
-  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:520px;width:100%;padding:26px;box-shadow:var(--shadow);max-height:calc(100vh - 40px);overflow-y:auto}
-  .mbox h3{font-size:20px;margin-bottom:6px}
+  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:520px;width:100%;padding:26px;box-shadow:var(--shadow);max-height:calc(100vh - 40px);overflow-y:auto;position:relative}
+  .mclose{position:absolute;top:14px;right:14px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:9px;color:var(--mut);font-size:22px;line-height:1;cursor:pointer;padding:0}
+  .mclose:hover{color:var(--text);background:rgba(255,255,255,.06);border-color:var(--line)}
+  .mclose:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  #resumePreview{width:100%;height:min(56vh,760px);border:1px solid var(--line);border-radius:12px;background:#e9ecf2;margin-bottom:10px}
+  mark.chgkey{background:rgba(255,214,0,.35);color:inherit;padding:0 3px;border-radius:3px}
+  .mbox h3{font-size:20px;margin-bottom:6px;padding-right:40px}
   .mbox p.sub{color:var(--mut);font-size:13px;margin-bottom:18px}
   .keyrow{display:flex;gap:8px}
   .note{font-size:12px;color:var(--mut2);margin-top:8px;line-height:1.5}
@@ -124,12 +131,38 @@
   .tagbox .chip.added{border-color:rgba(109,139,255,.55)}
   .tagbox .chip button{background:none;border:0;color:var(--mut);cursor:pointer;font-size:15px;line-height:1;padding:0 3px;border-radius:5px}
   .tagbox .chip button:hover{color:var(--red);background:rgba(251,113,133,.12)}
+  .uptags{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  .uptags-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:4px}
+  .uptags-head b{font-size:14.5px}
+  .uptags-q{font-size:13px;color:var(--mut);margin:0 0 12px;line-height:1.5}
+  .uptags .lab small{text-transform:none;letter-spacing:0;font-weight:500;color:var(--mut)}
+  .uptags .tagbox{margin-bottom:12px}
+  .uptags-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .uptags-foot .note{margin:0}
+  .atsfix{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5}
+  .atsfix:first-of-type{border-top:0}
+  .atsfix .gain{flex:0 0 auto;min-width:42px;text-align:center;font-weight:800;color:#7ff0c8;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);border-radius:8px;padding:2px 6px;font-size:12px}
+  .atsfix .how{color:var(--mut)}
+  .atsfix .who{font-size:11px;white-space:nowrap;border-radius:6px;padding:1px 7px;margin-left:4px}
+  .atsfix .who.auto,.atsfix .who.ai{color:#b9c6ff;background:rgba(109,139,255,.14)}
+  .atsfix .who.you{color:#ffd79a;background:rgba(255,190,90,.12)}
+  .review{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  .review h4{margin:0 0 8px;font-size:14px}
+  .sitegrp{margin-top:12px}
+  .sitegrp h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);margin:0 0 8px}
+  .sitebtns{display:flex;flex-wrap:wrap;gap:8px}
+  .sitebtn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--text);font-size:13px;text-decoration:none}
+  .sitebtn:hover{border-color:var(--acc)}
+  .sitebtn small{color:var(--mut2);font-size:11px}
+  .minispin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:spin 1s linear infinite;vertical-align:-1px;margin-right:6px}
   .tagbox input[type=text]{flex:1;min-width:150px;width:auto;border:0;background:transparent;padding:6px 4px;box-shadow:none}
   .sp-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 14px}
   .sp-filters select{padding:9px 11px;font-size:13px}
   @media(max-width:820px){.sp-filters{grid-template-columns:1fr 1fr}}
   .sp-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
   .sp-actions .note{margin:0}
+  .sp-next{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;border-color:rgba(109,139,255,.45);font-size:14px}
+  .sp-next .cta{margin-left:auto}
   .matchline{font-size:12px;color:var(--mut);margin:8px 0 2px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
   .matchline .chip{font-size:11.5px;padding:3px 8px}
   .summary{color:var(--mut);font-size:14px}
@@ -254,6 +287,19 @@
         <div style="flex:1"><b id="fname"></b><br><small id="fchars"></small></div>
         <button class="ghost" id="resumeDownloadBtn" style="display:none;padding:6px 10px;font-size:12px" onclick="redownloadResume()">⬇ PDF</button>
       </div>
+      <!-- The tags the job search will run on, read as soon as the resume is uploaded,
+           so they are checked before anything is searched. -->
+      <div class="uptags" id="upTags" style="display:none">
+        <div class="uptags-head"><b>🏷️ Your search tags</b><span class="note" id="upTagsStatus" style="margin:0"></span></div>
+        <p class="uptags-q">Are these right? Remove any that don't fit with <b>×</b>, type to add more, then set your filters and press <b>Analyze</b>. Jobs are searched with exactly these tags.</p>
+        <label class="lab" for="tagIn-up-roles">Positions <small>— job titles to search for</small></label>
+        <div class="tagbox" data-tags="roles" data-scope="up" onclick="focusTagInput(event)"></div>
+        <label class="lab" for="tagIn-up-skills">Skills <small>— a job must mention at least one; more matches rank higher</small></label>
+        <div class="tagbox" data-tags="skills" data-scope="up" onclick="focusTagInput(event)"></div>
+        <div class="uptags-foot">
+          <button class="ghost" type="button" id="upTagsRedo" style="font-size:12px;padding:6px 11px" onclick="suggestTags(true)">↻ Read again with AI</button>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -296,6 +342,9 @@
       <button class="cta" id="analyze" onclick="analyze()" disabled>Analyze &amp; Find My Jobs →</button>
     </div>
   </div>
+
+  <!-- The ATS score, live from the moment the resume is read. -->
+  <div class="panel" id="atsCard" style="display:none;margin-top:18px"></div>
 
   <div class="err" id="err"></div>
 
@@ -416,10 +465,11 @@
 
 <!-- Resume fix / review modal -->
 <div class="modal" id="resumeModal">
-  <div class="mbox" style="max-width:680px">
+  <div class="mbox" style="max-width:940px">
     <h3>Review your updated resume</h3>
-    <p class="sub" style="margin-bottom:14px">AI rewrote your resume to apply the improvements and ATS fixes above, using only facts already in your original resume. Review it carefully, edit anything that doesn't sound like you, then confirm.</p>
+    <p class="sub" style="margin-bottom:14px">AI applied the improvements and ATS fixes above to your own resume layout, using only facts already in it. Changed text is <mark class="chgkey">highlighted</mark>. Click anywhere in the page to edit it, then confirm to get the PDF.</p>
     <div id="resumeFixLoading">
+      <p class="note" id="resumeFixProgress" style="margin:0 0 10px"><span class="minispin"></span>Rebuilding your resume in its own layout…</p>
       <div class="skeleton" style="width:50%"></div>
       <div class="skeleton"></div>
       <div class="skeleton" style="width:90%"></div>
@@ -428,15 +478,18 @@
     </div>
     <div id="resumeFixFields" style="display:none">
       <div id="resumeChanges"></div>
-      <div class="field" style="margin-bottom:10px">
+      <div id="resumeScore" style="margin:0 0 10px;font-size:13px"></div>
+      <iframe id="resumePreview" title="Updated resume" style="display:none"></iframe>
+      <div class="field" id="resumeTextField" style="margin-bottom:10px;display:none">
         <label class="lab">Updated resume</label>
         <textarea id="resumeEditText" rows="18" style="font-family:Consolas,Menlo,monospace;font-size:12.5px"></textarea>
       </div>
+      <p class="note" id="resumeFormatNote" style="margin:0 0 10px"></p>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="flex:1"></span>
         <button class="ghost" onclick="closeModal('resumeModal')">Cancel</button>
         <button class="ghost" onclick="regenResumeFix()">Rewrite again</button>
-        <button class="cta inline" onclick="confirmResumeFix()">✓ Reviewed — download &amp; use</button>
+        <button class="cta inline" id="resumeConfirm" onclick="confirmResumeFix()">✓ Reviewed — download PDF &amp; use</button>
       </div>
     </div>
   </div>
@@ -456,7 +509,7 @@ let REMOTE=false;   // true when this page has to reach a bridge on your machine
 let ENGINES=[];
 if(!SELF)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=LOCAL_BRIDGE+a.getAttribute('href'));
 const COUNTRIES=["United States","United Kingdom","Canada","Germany","Netherlands","Ireland","France","Switzerland","Sweden","Spain","Poland","United Arab Emirates","Saudi Arabia","Qatar","Pakistan","India","Singapore","Australia","New Zealand","Japan","Hong Kong","Malaysia","Turkey","Portugal","Italy","Norway","Denmark","Finland","Belgium","Austria","Czech Republic","Romania","Estonia","Israel","South Africa","Egypt","Nigeria","Kenya","Brazil","Mexico","Argentina","Remote (Global)"];
-const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],live:[],liveMeta:null,candidateName:"",mail:{configured:false},filters:{days:7,workSetup:"",country:""},tags:{roles:[],skills:[],added:new Set()},suggestions:[]};
+const state={resumeText:"",resumeFile:null,fileName:"",drafts:{},jobs:[],live:[],liveMeta:null,candidateName:"",mail:{configured:false},filters:{days:7,workSetup:"",country:""},tags:{roles:[],skills:[],added:new Set(),removed:new Set(),touched:false},suggestions:[]};
 const $=id=>document.getElementById(id);
 
 /* ---------- init ---------- */
@@ -843,6 +896,15 @@ function saveSettings(){
 }
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+// Every popup gets a × in its corner, as well as closing on Esc or a click outside.
+document.querySelectorAll('.modal').forEach(m=>{
+  const box=m.querySelector('.mbox');
+  if(!box||box.querySelector('.mclose'))return;
+  const b=document.createElement('button');
+  b.type='button';b.className='mclose';b.setAttribute('aria-label','Close');b.title='Close';b.textContent='×';
+  b.onclick=()=>m.classList.remove('show');
+  box.prepend(b);
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));});
 
 /* ---------- file upload ---------- */
@@ -869,7 +931,8 @@ async function handleFile(f){
       for(let i=1;i<=pdf.numPages;i++){
         const page=await pdf.getPage(i);
         const c=await page.getTextContent();
-        txt+=c.items.map(it=>it.str).join(' ')+'\n';
+        // Keep the PDF's own line breaks, so titles and headings stay on their own lines.
+        txt+=c.items.map(it=>it.str+(it.hasEOL?'\n':' ')).join('')+'\n';
       }
     }else if(f.name.toLowerCase().endsWith('.docx')){
       const buf=await f.arrayBuffer();
@@ -881,6 +944,9 @@ async function handleFile(f){
     txt=txt.replace(/\s+\n/g,'\n').trim();
     if(txt.length<80){showErr('Could not read enough text from this file. If it is a scanned/image PDF, please upload a text-based PDF or DOCX.');return;}
     state.resumeText=txt;
+    // The original file, so "Fix my resume" can keep its layout. A new upload starts over.
+    state.origResume={name:f.name,buf:await f.arrayBuffer(),text:txt};
+    state.formatBase=null;state.resumeDoc=null;
     const ext=f.name.split('.').pop().toLowerCase();
     state.resumeFile={name:f.name,type:f.type||MIME[ext]||'application/octet-stream',data:await fileToBase64(f)};
     document.getElementById('resumeDownloadBtn').style.display='none';
@@ -888,12 +954,23 @@ async function handleFile(f){
     document.getElementById('fchars').textContent=txt.length.toLocaleString()+' characters parsed';
     document.getElementById('filemeta').style.display='flex';
     document.getElementById('analyze').disabled=false;
+    // The text as the file's own text layer orders it, which is what an ATS reads.
+    state.resumeRaw=txt; state.atsOriginal=null; state.atsBlocks=null; state.layoutMeta=null; state.review=null; state.origAts=null;
+    suggestTags(false);
+    prepareResume();
+    recruiterReview();
   }catch(err){showErr('Failed to parse file: '+err.message);}
 }
 
 /* ---------- analyze ---------- */
 async function analyze(){
   if(!state.resumeText){toast('Upload a resume first');return;}
+  // The search runs on the tags the person checked under the upload box.
+  commitTag('roles',false);commitTag('skills',false);
+  if(!state.tags.roles.length){toast('Add at least one position to search for');$('upTags').style.display='block';focusTag('up','roles');return;}
+  state.tagToken=(state.tagToken||0)+1; // a tag read still running must not change them now
+  $('upTagsRedo').disabled=false;
+  if(/Reading your resume/.test($('upTagsStatus').textContent))setTagStatus('');
   showErr('');
   document.getElementById('results').style.display='none';
   document.getElementById('loading').style.display='block';
@@ -905,12 +982,13 @@ async function analyze(){
   const workSetup=wsel.value, days=Number(dsel.value)||0;
   state.filters={days,workSetup,country};
   const R=state.resumeText;
+  const tags={roles:state.tags.roles.slice(),skills:state.tags.skills.slice()};
 
   // Split into 3 parallel calls — the headless CLI is slow, so one giant call times out.
   const tasks=[
-    callJSON(buildAnalysisPrompt(R,country,sen,workSetup)),
-    callJSON(buildJobsPrompt(R,country,sen,workSetup,'early-stage startups and fast-growing scale-ups',10)),
-    callJSON(buildJobsPrompt(R,country,sen,workSetup,'large multinational enterprises (MNCs), top global consulting firms, and specialist tech agencies',12))
+    callJSON(buildAnalysisPrompt(R,country,sen,workSetup,tags)),
+    callJSON(buildJobsPrompt(R,country,sen,workSetup,'early-stage startups and fast-growing scale-ups',10,tags)),
+    callJSON(buildJobsPrompt(R,country,sen,workSetup,'large multinational enterprises (MNCs), top global consulting firms, and specialist tech agencies',12,tags))
   ];
 
   try{
@@ -930,26 +1008,18 @@ async function analyze(){
     state.suggestions=jobs;
     state.suggestionsCountry=country;
     state.lastAnalysis=analysis;
-    /* The tags the live search runs on: positions and skills read off the resume,
-       which the person can then edit. Only what the resume shows — strengths are
-       sentences, and matching a sentence against a job ad finds nothing. */
-    state.tags={
-      roles:cleanTags(analysis.targetRoles||[]).slice(0,8),
-      skills:cleanTags(analysis.topSkills||[]).slice(0,20),
-      added:new Set()
-    };
-    if(!state.tags.roles.length)state.tags.roles=cleanTags(jobs.map(j=>j.role||'')).slice(0,4);
-    /* The model names employers; it cannot know what is open today. Ask the bridge
-       for real postings from those companies' own careers feeds and the live job
-       boards, and put those first. */
-    setLoadingNote('Checking live job feeds for openings…');
+    /* The live search runs on the tags the person already checked under the upload
+       box, so it starts straight away; the results page can still edit them. The
+       model's shortlist is only used to decide whose careers feed to read. */
+    document.getElementById('loadingTxt').textContent='Checking live job feeds for openings…';
+    clearInterval(window._lc);
     const live=await findLiveJobs();
     state.live=live.jobs||[];
     state.liveMeta=live.meta||null;
-    jobs=[...state.live.map(liveToJob), ...jobs];
+    state.searched=true;
 
     const parsed={analysis, resumeImprovements:improvements, opportunities:jobs};
-    state.jobs=jobs;
+    state.jobs=[...state.live.map(liveToJob),...jobs];
     state.candidateName=(analysis&&analysis.candidateName)||"";
     state.contact={name:state.candidateName,email:analysis.candidateEmail||"",phone:analysis.candidatePhone||"",linkedin:analysis.candidateLinkedIn||""};
     state.drafts={};
@@ -971,7 +1041,6 @@ function dedupeJobs(arr){
 
 const LOAD_MSGS=["Reading your resume like a recruiter…","Mapping your skills to market demand…","Scanning startups, scale-ups, MNCs & consulting firms…","Scoring each role against your profile…","Drafting your application strategy…"];
 /* Pin one message while a slow step runs, instead of letting the carousel spin. */
-function setLoadingNote(t){clearInterval(window._lc);const el=document.getElementById('loadingTxt');if(el)el.textContent=t;}
 function cycleLoading(){let i=0;clearInterval(window._lc);window._lc=setInterval(()=>{i=(i+1)%LOAD_MSGS.length;document.getElementById('loadingTxt').textContent=LOAD_MSGS[i];},2200);}
 
 const WORK_SETUP_BRIEF={
@@ -979,9 +1048,14 @@ const WORK_SETUP_BRIEF={
   hybrid:'The candidate is targeting HYBRID roles. Weigh both in-office collaboration and independent delivery, and note whether the resume shows they can do both.',
   onsite:'The candidate is targeting ON-SITE roles. Weigh local presence: work authorisation, relocation readiness, on-the-ground stakeholder and team experience.',
 };
-function buildAnalysisPrompt(resume,country,sen,workSetup){
+function tagsBrief(tags){
+  if(!tags||!tags.roles.length)return '';
+  return `The candidate has confirmed they are looking for these positions: ${tags.roles.join(', ')}.${tags.skills.length?` Their key skills: ${tags.skills.join(', ')}.`:''} Judge the resume against these target roles.`;
+}
+function buildAnalysisPrompt(resume,country,sen,workSetup,tags){
   return `You are a top 1% tech recruiter for the ${country} hiring market. Analyze the candidate's resume below.
 ${sen!=='auto'?`The candidate is targeting roles at this level: ${sen}.`:''}
+${tagsBrief(tags)}
 ${WORK_SETUP_BRIEF[workSetup]||''}
 ${workSetup?`At least two of the resumeImprovements MUST be specific to landing ${workSetup} roles in ${country} — not generic advice.`:''}
 Also audit the resume against modern ATS (Workday, Greenhouse, Lever, Taleo): an overall score 0-100, plus six areas each scored 0-100 with a one-line note — "Keyword & role alignment", "Formatting & parseability", "Section structure", "Quantified impact", "Contact & links", "Skills coverage". Be a strict but fair ATS auditor.
@@ -998,9 +1072,10 @@ const WORK_SETUP_HINT={
   hybrid:'The candidate wants HYBRID work. Only list employers with a real office presence in ${country} that run a hybrid schedule.',
   onsite:'The candidate wants ON-SITE work. Only list employers with an actual office and on-site team in ${country}.',
 };
-function buildJobsPrompt(resume,country,sen,workSetup,segment,count){
+function buildJobsPrompt(resume,country,sen,workSetup,segment,count,tags){
   return `You are a top 1% tech recruiter for the ${country} hiring market. Based on the candidate's resume below, list EXACTLY ${count} REAL, well-known ${segment} that are hiring for this candidate's profile in ${country} RIGHT NOW.
 ${sen!=='auto'?`Target this level: ${sen}.`:''}
+${tags&&tags.roles.length?`Every role you list must be one of the positions the candidate confirmed, or a direct equivalent: ${tags.roles.join(', ')}.`:''}
 ${(WORK_SETUP_HINT[workSetup]||'').replace('${country}',country)}
 
 ACCURACY RULES — these matter more than filling the list:
@@ -1070,8 +1145,10 @@ function cleanTags(list){
 async function findLiveJobs(){
   const {roles,skills}=state.tags;
   const {country,days,workSetup}=state.filters;
+  // The shortlist's companies, with the website the recruiter gave for each: the
+  // server reads the company's careers page to find the job board it hires through.
   const companies=state.suggestionsCountry===country
-    ? [...new Set((state.suggestions||[]).map(j=>j.company||'').filter(Boolean))].slice(0,20) : [];
+    ? [...new Map((state.suggestions||[]).filter(j=>j.company).map(j=>[j.company.toLowerCase(),{name:j.company,domain:careerDomainOf(j)}])).values()].slice(0,24) : [];
   if(!roles.length)return {jobs:[],meta:{error:'Add at least one position to search for.'}};
   try{
     const r=await post('/api/jobs',{roles,companies,country,workSetup,days:days||0,limit:30,
@@ -1084,11 +1161,13 @@ async function findLiveJobs(){
 /* A live posting is reshaped into the same object the cards and the email flow use,
    so one code path serves both kinds of result. */
 function liveToJob(p){
+  const confirmed=p.confirmed!==false;
   return {company:p.company,role:p.title,location:p.location||'',companyType:'',
-    category:'live',fitScore:0,careerDomain:'',applyMethod:'live',applyEmail:'',
+    category:confirmed?'live':'board',fitScore:0,careerDomain:'',applyMethod:'live',applyEmail:'',
     matchReasons:[],missingForRole:[],pitch:'',
     _live:true,_url:p.url,_postedAt:p.postedAt,_source:p.sourceLabel||p.source,_workplace:p.workplace||'',
-    _linkState:p.linkState||'',_direct:!!p.direct,_skills:p.matchedSkills||[]};
+    _linkState:p.linkState||'',_direct:!!p.direct,_confirmed:confirmed,_skills:p.matchedSkills||[],
+    _matchedRole:p.matchedRole||'',_foundVia:p.foundVia||'',_wsInferred:!!p.workplaceInferred};
 }
 function timeAgo(iso){
   const t=Date.parse(iso); if(!t)return '';
@@ -1228,18 +1307,26 @@ function renderResults(d){
     <div class="statrow" style="margin-bottom:14px">
       <div class="stat"><b>${esc(a.seniority||'—')}</b><span>Level</span></div>
       <div class="stat"><b>${esc(a.yearsExperience||'—')}</b><span>Experience</span></div>
-      <div class="stat"><b>${a.ats?Math.round(a.ats.score)+'/100':'—'}</b><span>ATS score</span></div>
+      <div class="stat"><b>${state.ats?state.ats.score+'/100':a.ats?Math.round(a.ats.score)+'/100':'—'}</b><span>ATS score</span></div>
       <div class="stat"><b>${(d.opportunities||[]).length}</b><span>Opportunities</span></div>
       <div class="stat"><b>${counts.high||0}</b><span>High-probability</span></div>
     </div>
     <p class="summary">${esc(a.summary||'')}</p>
   </div>
+  ${state.searched?'':`<div class="panel sp-next" id="spNext" style="margin-bottom:16px">👉 <b>Next:</b> review the positions and skills we read from your resume, then search for live openings.
+    <button class="cta inline" onclick="goToProfile()">Review search profile</button></div>`}
   <div class="analysis-grid">
     <div class="mini"><h4>✅ Strengths</h4><div class="chips">${(a.strengths||[]).map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div></div>
     <div class="mini"><h4>⚠️ Gaps for ${esc(state.country)}</h4><div class="chips">${(a.gaps||[]).map(x=>`<span class="chip gap">${esc(x)}</span>`).join('')}</div></div>
   </div>`;
 
-  const ats=a.ats;
+  if(state.ats){
+    html+=`<div class="secttitle">🤖 ATS Compatibility Score</div>
+    <div class="panel ats-panel">${atsPanelHTML(state.ats)}
+      ${(a.ats&&(a.ats.quickFixes||[]).length)?`<div class="ats-fixes"><h4>⚡ The recruiter’s ATS notes</h4><ul>${a.ats.quickFixes.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></div>`:''}
+    </div>`;
+  }
+  const ats=state.ats?null:a.ats;
   if(ats){
     const sc=Math.round(ats.score||0), col=scoreColor(sc);
     html+=`<div class="secttitle">🤖 ATS Compatibility Score</div>
@@ -1278,11 +1365,12 @@ function renderResults(d){
   html+=`<div class="secttitle">💼 Prioritized Job List <span class="pill" id="jobsPill"></span></div>
   ${searchProfileHTML()}
   <div id="liveSummary"></div>
-  <div class="filters">
+  <div class="filters" id="jobFilters">
     <input class="grow" type="text" id="search" placeholder="🔍 Filter by company or role…" oninput="renderJobs()" />
     <select id="fcat" onchange="renderJobs()">
       <option value="">All results</option>
-      <option value="live">✅ Live openings only</option>
+      <option value="live">✅ Confirmed openings only</option>
+      <option value="board">🟡 Job-board listings only</option>
       <option value="high">High-probability</option>
       <option value="medium">Medium-probability</option>
       <option value="stretch">Stretch</option>
@@ -1296,7 +1384,8 @@ function renderResults(d){
       <option value="company">Sort: Company A–Z</option>
     </select>
   </div>
-  <div id="jobsWrap"></div>`;
+  <div id="jobsWrap"></div>
+  <div id="jobSites"></div>`;
 
   r.innerHTML=html;
   r.style.display='block';
@@ -1306,20 +1395,24 @@ function renderResults(d){
   renderJobs();
   r.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function goToProfile(){
+  $('searchProfile').scrollIntoView({behavior:'smooth',block:'start'});
+  setTimeout(()=>focusTag('sp','roles',{preventScroll:true}),400);
+}
 
 /* ---------- search profile: the tags and filters every live opening must match ---------- */
 function searchProfileHTML(){
   const opts=id=>document.getElementById(id).innerHTML;
   return `<div class="panel" id="searchProfile" style="margin-bottom:14px">
     <div class="sp-head"><b>🎯 Search profile</b>
-      <span class="note" style="margin:0">Read from your resume. Remove anything that doesn't fit and add what's missing, then press <b>Update results</b>. A live opening is only shown if it matches <b>all</b> of this.</span></div>
+      <span class="note" style="margin:0">Read from your resume. Remove anything that doesn't fit and add what's missing, then press <b>${state.searched?'Update results':'Search jobs'}</b>. A live opening is only shown if it matches <b>all</b> of this.</span></div>
     <div class="sp-group">
-      <label class="lab" for="tagIn-roles">Positions <small>— the job title must be one of these</small></label>
-      <div class="tagbox" id="tags-roles" onclick="focusTagInput('roles',event)"></div>
+      <label class="lab" for="tagIn-sp-roles">Positions <small>— the job title must be one of these</small></label>
+      <div class="tagbox" data-tags="roles" data-scope="sp" onclick="focusTagInput(event)"></div>
     </div>
     <div class="sp-group">
-      <label class="lab" for="tagIn-skills">Skills <small>— the job description must mention at least one; more matches rank higher</small></label>
-      <div class="tagbox" id="tags-skills" onclick="focusTagInput('skills',event)"></div>
+      <label class="lab" for="tagIn-sp-skills">Skills <small>— the job description must mention at least one; more matches rank higher</small></label>
+      <div class="tagbox" data-tags="skills" data-scope="sp" onclick="focusTagInput(event)"></div>
     </div>
     <div class="sp-filters">
       <div><label class="lab" for="spCountry">Country</label><select id="spCountry" onchange="profileFilterChanged('country')">${opts('country')}</select></div>
@@ -1328,7 +1421,7 @@ function searchProfileHTML(){
       <div><label class="lab" for="spStage">Career stage</label><select id="spStage" onchange="profileFilterChanged('seniority')">${opts('seniority')}</select></div>
     </div>
     <div class="sp-actions">
-      <button class="cta inline" id="spUpdate" onclick="refreshLive()">Update results</button>
+      <button class="cta inline" id="spUpdate" onclick="refreshLive()">${state.searched?'Update results':'Search jobs'}</button>
       <span class="note" id="spStatus"></span>
     </div>
   </div>`;
@@ -1348,50 +1441,248 @@ function profileFilterChanged(top){
 ['country','datePosted','workSetup','seniority'].forEach(id=>$(id).addEventListener('change',()=>{syncProfileFilters();markProfileDirty();}));
 function markProfileDirty(){
   const s=$('spStatus');
-  if(s&&state.lastAnalysis)s.textContent='Changed — press Update results to search again.';
+  if(s&&state.lastAnalysis&&state.searched)s.textContent='Changed — press Update results to search again.';
 }
 
+/* The same tags are edited in two places — under the upload box, before Analyze,
+   and in the search profile on the results page — and both show the one list. */
 function renderTags(){
-  for(const kind of ['roles','skills']){
-    const box=$('tags-'+kind);
-    if(!box)continue;
-    const list=state.tags[kind];
+  document.querySelectorAll('.tagbox[data-tags]').forEach(box=>{
+    const kind=box.dataset.tags, scope=box.dataset.scope, list=state.tags[kind];
     const ph=kind==='roles'?'Add a position, e.g. Platform Engineer':'Add a skill, e.g. Kubernetes';
-    box.innerHTML=list.map((t,i)=>`<span class="chip${state.tags.added.has(kind+':'+t.toLowerCase())?' added':''}">${esc(t)}<button type="button" aria-label="Remove ${esc(t)}" title="Remove" onclick="removeTag('${kind}',${i})">×</button></span>`).join('')
-      +`<input type="text" id="tagIn-${kind}" placeholder="${list.length?ph:(kind==='roles'?'Add at least one position':'Add skills')}" onkeydown="tagKey('${kind}',event)" onblur="commitTag('${kind}',false)" onpaste="setTimeout(()=>commitTag('${kind}'),0)">`;
-  }
+    box.innerHTML=list.map((t,i)=>`<span class="chip${state.tags.added.has(kind+':'+t.toLowerCase())?' added':''}">${esc(t)}<button type="button" aria-label="Remove ${esc(t)}" title="Remove" onclick="removeTag('${kind}',${i},'${scope}')">×</button></span>`).join('')
+      +`<input type="text" id="tagIn-${scope}-${kind}" placeholder="${list.length?ph:(kind==='roles'?'Add at least one position':'Add skills')}" onkeydown="tagKey('${kind}',event)" onblur="commitTag('${kind}',false,this)" onpaste="setTimeout(()=>commitTag('${kind}',true,this),0)">`;
+  });
+  // The job-site buttons search for these positions.
+  if($('jobSites')&&$('jobSites').innerHTML)renderJobSites();
 }
-function focusTagInput(kind,e){if(e.target===e.currentTarget)$('tagIn-'+kind).focus();}
+function focusTag(scope,kind,opts){const i=$(`tagIn-${scope}-${kind}`);if(i)i.focus(opts);}
+function focusTagInput(e){if(e.target===e.currentTarget){const i=e.currentTarget.querySelector('input');if(i)i.focus();}}
 function tagKey(kind,e){
   const inp=e.target;
-  if(e.key==='Enter'||e.key===','||e.key===';'){e.preventDefault();commitTag(kind);}
-  else if(e.key==='Backspace'&&!inp.value&&state.tags[kind].length){removeTag(kind,state.tags[kind].length-1);}
+  if(e.key==='Enter'||e.key===','||e.key===';'){e.preventDefault();commitTag(kind,true,inp);}
+  else if(e.key==='Backspace'&&!inp.value&&state.tags[kind].length){removeTag(kind,state.tags[kind].length-1,inp.closest('.tagbox').dataset.scope);}
 }
-/* Pasting "React, Node.js; AWS" adds three tags. */
-function commitTag(kind,refocus=true){
-  const inp=$('tagIn-'+kind);
-  if(!inp)return;
-  const parts=inp.value.split(/[,;\n]+/).map(s=>s.trim()).filter(Boolean);
+/* Pasting "React, Node.js; AWS" adds three tags. With no input given, whatever is
+   typed in any of this kind's boxes is added. */
+function commitTag(kind,refocus=true,inp){
+  const inputs=inp?[inp]:[...document.querySelectorAll(`.tagbox[data-tags="${kind}"] input`)];
+  const parts=inputs.flatMap(i=>i.value.split(/[,;\n]+/)).map(s=>s.trim()).filter(Boolean);
   if(!parts.length)return;
+  const scope=inp&&inp.closest('.tagbox')?inp.closest('.tagbox').dataset.scope:null;
   const before=state.tags[kind].length;
   state.tags[kind]=cleanTags([...state.tags[kind],...parts]).slice(0,kind==='roles'?12:40);
-  state.tags[kind].slice(before).forEach(t=>state.tags.added.add(kind+':'+t.toLowerCase()));
+  state.tags[kind].slice(before).forEach(t=>{state.tags.added.add(kind+':'+t.toLowerCase());state.tags.removed.delete(kind+':'+t.toLowerCase());});
+  state.tags.touched=true;
   renderTags();
-  if(refocus)$('tagIn-'+kind).focus();
+  if(refocus&&scope)focusTag(scope,kind);
   markProfileDirty();
+  atsSoon();
 }
-function removeTag(kind,i){
-  state.tags[kind].splice(i,1);
+function removeTag(kind,i,scope){
+  const [t]=state.tags[kind].splice(i,1);
+  if(t)state.tags.removed.add(kind+':'+t.toLowerCase());
+  state.tags.touched=true;
   renderTags();
-  $('tagIn-'+kind).focus();
+  if(scope)focusTag(scope,kind);
   markProfileDirty();
+  atsSoon();
+}
+
+/* ---------- tags read at upload ----------
+   A quick read runs in the browser the moment the resume is parsed, so there is
+   something to check straight away. The AI then reads the resume properly and its
+   tags replace the quick ones — or, once the person has started editing, are added
+   to theirs without bringing back anything they removed. */
+const SKILL_WORDS=['JavaScript','TypeScript','Python','Java','Kotlin','Swift','Go','Golang','Rust','C++','C#','C','PHP','Ruby','Scala','R','MATLAB','Dart','Objective-C','Perl','Bash','PowerShell','SQL','NoSQL','GraphQL','HTML','CSS','Sass','React','React Native','Next.js','Angular','Vue','Vue.js','Svelte','Redux','Node.js','Express','NestJS','Django','Flask','FastAPI','Spring','Spring Boot','.NET','ASP.NET','Laravel','Rails','Flutter','jQuery','Tailwind','Bootstrap','PostgreSQL','MySQL','SQL Server','Oracle','MongoDB','Redis','Elasticsearch','Cassandra','DynamoDB','Firebase','Supabase','SQLite','Snowflake','BigQuery','Redshift','Databricks','Kafka','RabbitMQ','Spark','Hadoop','Airflow','dbt','ETL','AWS','Azure','GCP','Google Cloud','Docker','Kubernetes','Terraform','Ansible','Jenkins','GitHub Actions','GitLab CI','CI/CD','Linux','Git','Nginx','Microservices','REST APIs','gRPC','Serverless','Lambda','OpenShift','Helm','Prometheus','Grafana','Datadog','Machine Learning','Deep Learning','NLP','Computer Vision','TensorFlow','PyTorch','Keras','scikit-learn','Pandas','NumPy','LLM','Generative AI','OpenAI','LangChain','Power BI','Tableau','Looker','Excel','Statistics','Data Analysis','Data Modeling','Figma','Sketch','Adobe XD','Photoshop','Illustrator','UI Design','UX Design','User Research','Prototyping','Wireframing','Selenium','Cypress','Playwright','Jest','JUnit','Pytest','Postman','Jira','Confluence','Agile','Scrum','Kanban','SAP','Salesforce','HubSpot','SEO','SEM','Google Analytics','Digital Marketing','Content Marketing','Product Management','Project Management','Stakeholder Management','Financial Analysis','Financial Modeling','Accounting','IFRS','Budgeting','Forecasting','Auditing','Recruitment','Payroll','Sales','Business Development','Customer Success','Networking','Cybersecurity','Penetration Testing','SIEM','ISO 27001','Solidity','Blockchain','Unity','Unreal Engine','AutoCAD','SolidWorks','Revit','Six Sigma','Lean'];
+const ROLE_WORD=/\b(engineer|developer|analyst|manager|designer|architect|consultant|scientist|specialist|administrator|officer|director|accountant|coordinator|executive|lead|programmer|tester|strategist|researcher|intern|associate)\b/i;
+function escRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function quickSkills(text){
+  const found=[];
+  for(const w of SKILL_WORDS){
+    // Letters and digits must not touch the match, so "Go" is not found in "Google".
+    const re=new RegExp('(^|[^A-Za-z0-9+#.])'+escRe(w)+'(?![A-Za-z0-9+#])',w.length<=2?'':'i');
+    const m=text.match(re);
+    if(m)found.push({w,at:m.index});
+  }
+  return cleanTags(found.sort((a,b)=>a.at-b.at).map(f=>f.w)).slice(0,15);
+}
+function quickRoles(text){
+  const out=[];
+  for(const raw of text.split(/\n/).slice(0,200)){
+    for(const part of raw.split(/\s[|•·–—]\s|\s{3,}/)){
+      const t=part.replace(/\(.*?\)/g,'').replace(/[,@].*$/,'').replace(/\s+at\s.*$/i,'').trim();
+      if(t.length<6||t.length>48||!ROLE_WORD.test(t)||/\d{4}|[.:;!?]$/.test(t))continue;
+      const words=t.split(/\s+/);
+      if(words.length<2||words.length>5||!/^[A-Z]/.test(t))continue;
+      out.push(words.map(w=>w.length<=3&&w===w.toUpperCase()?w:w[0].toUpperCase()+w.slice(1)).join(' '));
+    }
+  }
+  return cleanTags(out).slice(0,4);
+}
+function buildTagsPrompt(resume,sen){
+  return `You are a top 1% tech recruiter. Read the candidate's resume below and give the tags a job search should run on.
+${sen&&sen!=='auto'?`The candidate is targeting roles at this level: ${sen}.`:''}
+Respond with ONLY valid minified JSON (no markdown, no commentary), matching exactly:
+{"positions":["3-6 job titles EXACTLY as job boards write them, best fit first — e.g. 'Senior Backend Engineer', 'Data Engineer'. Real, searchable titles only: no company jargon, no slashes, no 'or', no seniority ranges, no invented hybrids. Include the seniority word only when it genuinely fits this candidate."],"skills":["8-15 concrete hard skills this candidate has actually used, written exactly as job ads write them — languages, frameworks, tools, platforms, methods. Most relevant first. No soft skills, no sentences, no skills the resume does not show."]}
+
+Resume:
+"""${resume.slice(0,12000)}"""`;
+}
+function setTagStatus(html){const e=$('upTagsStatus');if(e)e.innerHTML=html;}
+async function suggestTags(again){
+  if(!state.resumeText)return;
+  const token=state.tagToken=(state.tagToken||0)+1;
+  $('upTags').style.display='block';
+  if(!again){
+    state.tags={roles:quickRoles(state.resumeText),skills:quickSkills(state.resumeText),added:new Set(),removed:new Set(),touched:false};
+    renderTags();
+  }
+  const btn=$('upTagsRedo'); btn.disabled=true;
+  setTagStatus('<span class="minispin"></span>Reading your resume with AI…');
+  try{
+    const d=await callJSON(buildTagsPrompt(state.resumeText,$('seniority').value));
+    if(token!==state.tagToken)return; // a newer upload or Analyze took over
+    const roles=cleanTags(d.positions||d.targetRoles||[]).slice(0,8), skills=cleanTags(d.skills||d.topSkills||[]).slice(0,20);
+    if(!roles.length&&!skills.length)throw new Error('the AI returned no tags');
+    const T=state.tags;
+    const merge=(kind,ai)=>{
+      const mine=T[kind].filter(t=>T.added.has(kind+':'+t.toLowerCase()));
+      const base=again||!T.touched?[...ai,...mine]:[...T[kind],...ai];
+      return cleanTags(base.filter(t=>!T.removed.has(kind+':'+t.toLowerCase()))).slice(0,kind==='roles'?12:40);
+    };
+    T.roles=merge('roles',roles);
+    T.skills=merge('skills',skills);
+    renderTags();
+    atsSoon();
+    setTagStatus('✓ Read by AI — please check them');
+  }catch(e){
+    if(token!==state.tagToken)return;
+    setTagStatus(`⚠️ Quick read only — the AI could not read it (${esc(e.message||String(e))}). Check the tags, or connect an engine in ⚙ and press Read again.`);
+  }finally{
+    if(token===state.tagToken)btn.disabled=false;
+  }
+}
+
+
+/* ---------- the ATS score, live ----------
+   Scored the moment a resume is read, and again whenever it changes: its layout is
+   rebuilt, a tag is edited, or "Fix my resume" rewrites it. The checks and their
+   points are in atsscore.js, so the same resume always gets the same score and each
+   fix says what it is worth. The recruiter review under the checks is the AI's. */
+function fileKind(){const n=(state.origResume&&state.origResume.name||state.fileName||'').toLowerCase();return /\.pdf$/.test(n)?'pdf':/\.docx$/.test(n)?'docx':'txt';}
+function computeAts(){
+  if(!state.resumeText||!window.ATSScore)return null;
+  const blocks=state.atsBlocks||null;
+  const text=blocks?blocks.map(b=>(b.bullet?'• ':'')+b.text).join('\n'):state.resumeText;
+  state.ats=ATSScore.score({text,rawText:state.resumeRaw||state.resumeText,blocks,
+    meta:state.layoutMeta||{kind:fileKind()},tags:state.tags});
+  // The uploaded file, scored against the same tags, is the "before" of any fix: a
+  // tag edit moves both, so only the fix shows as a change.
+  const o=state.origAts;
+  state.atsOriginal=o?ATSScore.score({text:o.text,rawText:o.raw,blocks:o.blocks,meta:o.meta,tags:state.tags}).score:state.ats.score;
+  return state.ats;
+}
+function refreshAts(){computeAts();renderAtsCard();}
+let _atsTimer;function atsSoon(){clearTimeout(_atsTimer);_atsTimer=setTimeout(refreshAts,250);}
+/* The layout is rebuilt as soon as the file is read: it gives the checks the resume's
+   real paragraphs, headings and bullets, and "Fix my resume" opens at once. */
+async function prepareResume(){
+  const token=state.prepToken=(state.prepToken||0)+1;
+  refreshAts();
+  try{
+    if(!window.ResumeFormat)return;
+    const r=state.origResume?await ResumeFormat.build(state.origResume):ResumeFormat.fromText(state.resumeText);
+    if(token!==state.prepToken)return;
+    state.formatBase=r.html;
+    state.layoutMeta={kind:r.kind,...(r.meta||{})};
+    state.atsBlocks=ResumeFormat.blocks(new DOMParser().parseFromString(r.html,'text/html'));
+  }catch(e){console.warn('Layout rebuild failed',e);}
+  if(token!==state.prepToken)return;
+  const blocks=state.atsBlocks;
+  state.origAts={blocks,raw:state.resumeRaw||state.resumeText,meta:state.layoutMeta||{kind:fileKind()},
+    text:blocks?blocks.map(b=>(b.bullet?'• ':'')+b.text).join('\n'):state.resumeText};
+  refreshAts();
+}
+const WHO={auto:'✨ Fix my resume does this',ai:'✨ Fix my resume rewrites this',you:'✍️ Only you can add this'};
+function atsPanelHTML(a,opts={}){
+  const sc=a.score,col=scoreColor(sc);
+  // Before and after, once a fixed version is in use.
+  const base=state.resumeDoc?state.atsOriginal:null;
+  const moved=base!=null&&base!==sc?`<span class="chip ${sc>base?'good':'gap'}" style="margin-left:8px">your file ${base} → fixed ${sc}</span>`:'';
+  const fixes=a.fixes.slice(0,opts.all?20:7);
+  return `<div class="ats-head">
+      <div class="ats-ring" style="background:conic-gradient(${col} ${sc*3.6}deg, var(--card2) 0)">
+        <div class="ats-inner"><span style="color:${col}">${sc}</span><small>/100</small></div>
+      </div>
+      <div class="ats-verdict">
+        <h4>ATS score · ${esc(a.grade)}${moved}</h4>
+        <p>Scored live against the checks ATS parsers and recruiters’ screening tools apply — the same resume always gets the same score. It updates as you edit your tags or fix the resume.</p>
+      </div>
+    </div>
+    <div class="ats-bars">${a.categories.map(c=>{const p=Math.round(c.got/c.max*100),cc=scoreColor(p);return `
+      <div class="ats-bar"><div class="ats-bar-top"><span>${esc(c.label)}</span><b style="color:${cc}">${Math.round(c.got)}/${c.max}</b></div>
+        <div class="ats-track"><div class="ats-fill" style="width:${p}%;background:${cc}"></div></div></div>`;}).join('')}</div>
+    ${fixes.length?`<div class="ats-fixes"><h4>What raises it</h4>${fixes.map(f=>`<div class="atsfix">
+        <span class="gain">+${f.gain}</span>
+        <div><b>${esc(f.label)}</b> — ${esc(f.detail)}<br><span class="how">${esc(f.fix)}</span> <span class="who ${f.fixable}">${WHO[f.fixable]||''}</span></div>
+      </div>`).join('')}</div>`:'<div class="ats-fixes"><h4>Nothing left to fix — every check passes.</h4></div>'}`;
+}
+function reviewHTML(){
+  const r=state.review;
+  if(!r)return '';
+  if(r.loading)return `<div class="review"><h4>🧑‍💼 Recruiter review</h4><p class="note"><span class="minispin"></span>A senior recruiter is reading your resume…</p></div>`;
+  if(r.error)return `<div class="review"><h4>🧑‍💼 Recruiter review</h4><p class="note">⚠️ The AI could not review it (${esc(r.error)}). The score above does not need it. <button class="ghost" style="font-size:12px;padding:4px 10px" onclick="recruiterReview()">Try again</button></p></div>`;
+  return `<div class="review"><h4>🧑‍💼 Recruiter review</h4>
+    ${r.verdict?`<p style="margin:0 0 8px">${esc(r.verdict)}</p>`:''}
+    ${(r.strengths||[]).length?`<div class="chips" style="margin-bottom:10px">${r.strengths.map(s=>`<span class="chip good">${esc(s)}</span>`).join('')}</div>`:''}
+    ${(r.issues||[]).map(it=>`<div class="imp"><div class="prio ${esc(String(it.priority||'low').toLowerCase())}">${esc(String(it.priority||'low').toLowerCase())}</div><div class="body"><b>${esc(it.title||'')}</b><p>${esc(it.detail||'')}</p></div></div>`).join('')}
+  </div>`;
+}
+function renderAtsCard(){
+  const el=$('atsCard'); if(!el)return;
+  const a=state.ats;
+  if(!a){el.style.display='none';return;}
+  el.style.display='block';
+  el.innerHTML=`<div class="sp-head"><b>📊 Live ATS check</b><span class="note" style="margin:0">${esc(state.fileName||'')}</span></div>
+    <div class="ats-panel" style="border:0;padding:0;background:none">${atsPanelHTML(a)}</div>
+    ${reviewHTML()}
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+      <button class="cta inline" onclick="openResumeFix()">✨ Fix my resume — keeps your format</button>
+      <span class="note" style="margin:0">Applies the fixes marked ✨ and the recruiter’s notes, in your own layout and fonts. You review every change before it is used.</span>
+    </div>`;
+}
+function buildReviewPrompt(){
+  const roles=(state.tags.roles||[]).join(', ');
+  return `You are a senior technical recruiter who also knows how ATS software (Workday, Greenhouse, Lever, Taleo) parses resumes. Review the resume below the way you would when deciding in under a minute whether to call this candidate${roles?` for roles like: ${roles}`:''}.
+Be specific to THIS resume: name the actual section, bullet or phrase, and say exactly what to change. Do not give generic advice that would apply to anyone. Do not comment on formatting you cannot see; judge the content.
+Respond with ONLY valid minified JSON (no markdown, no commentary):
+{"verdict":"one plain sentence: would you call them, and why","strengths":["2-3 short, specific strengths"],"issues":[{"title":"short","detail":"what is wrong and exactly how to fix it, quoting the resume","priority":"high|medium|low","area":"keywords|impact|clarity|structure|credibility"}]}
+Give 4-6 issues, most important first.
+
+Resume:
+"""${state.resumeText.slice(0,12000)}"""`;
+}
+async function recruiterReview(){
+  if(!state.resumeText)return;
+  const token=state.reviewToken=(state.reviewToken||0)+1;
+  state.review={loading:true}; renderAtsCard();
+  try{
+    const d=await callJSON(buildReviewPrompt());
+    if(token!==state.reviewToken)return;
+    state.review={verdict:d.verdict||'',strengths:(d.strengths||[]).slice(0,3),issues:(d.issues||[]).slice(0,6)};
+  }catch(e){
+    if(token!==state.reviewToken)return;
+    state.review={error:e.message||String(e)};
+  }
+  renderAtsCard();
 }
 
 /* Search again with the edited tags and filters. Only the live search runs: the
    resume analysis does not change, so there is no reason to wait on the model. */
 async function refreshLive(){
   commitTag('roles',false);commitTag('skills',false);
-  if(!state.tags.roles.length){toast('Add at least one position');$('tagIn-roles').focus();return;}
+  if(!state.tags.roles.length){toast('Add at least one position');focusTag('sp','roles');return;}
   const country=csel.value, days=Number(dsel.value)||0, workSetup=wsel.value;
   state.filters={days,workSetup,country};
   const btn=$('spUpdate'), st=$('spStatus');
@@ -1405,11 +1696,13 @@ async function refreshLive(){
     const sugg=state.suggestionsCountry===country?(state.suggestions||[]):[];
     state.jobs=[...state.live.map(liveToJob),...sugg];
     state.drafts={};
+    state.searched=true;
+    const nx=$('spNext'); if(nx)nx.style.display='none';
     st.textContent='Updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.';
   }catch(e){
     st.textContent='';showErr(e.message||String(e));
   }finally{
-    btn.disabled=false;btn.textContent='Update results';
+    btn.disabled=false;btn.textContent=state.searched?'Update results':'Search jobs';
   }
   renderLiveSummary();
   renderJobs();
@@ -1417,13 +1710,25 @@ async function refreshLive(){
 
 /* Says plainly what was and was not verified, including when nothing was, and why
    postings were left out — a short list should never look like a broken search. */
-const REJECT_LABEL={date:'posted outside {days}',position:'a different position or seniority',setup:'not {setup}',
-  country:'not open to {country}',skills:"didn't mention any of your skills",link:'link dead or not the posting',duplicate:'duplicates'};
+const REJECT_LABEL={date:'posted outside {days} (by the employer’s own date where there is one)',position:'a different position or seniority',setup:'not {setup}',
+  country:'not open to {country}',skills:"didn't mention your skills",link:'link dead, not the posting, or not checkable',duplicate:'duplicates',
+  closed:'closed at the employer (a job board still showed them)'};
 function renderLiveSummary(){
   const el=$('liveSummary');
   if(!el)return;
+  // Before the first search, the list stays hidden: nothing in it has been matched to the tags yet.
+  const f0=$('jobFilters'), w0=$('jobsWrap');
+  if(f0)f0.style.display=state.searched?'':'none';
+  if(w0)w0.style.display=state.searched?'':'none';
+  if(!state.searched){
+    const pill=$('jobsPill'); if(pill)pill.textContent='';
+    el.innerHTML='';
+    return;
+  }
   const liveN=state.live.length, sugN=state.jobs.length-liveN;
-  const pill=$('jobsPill'); if(pill)pill.textContent=`${liveN} live · ${sugN} suggested`;
+  const confN=state.live.filter(p=>p.confirmed!==false).length, boardN=liveN-confN;
+  const pill=$('jobsPill'); if(pill)pill.textContent=`${confN} confirmed · ${boardN} board · ${sugN} suggested`;
+  renderJobSites();
   const m=state.liveMeta, f=state.filters;
   const scope=`${daysLabel()}${f.workSetup?', '+WS_LABEL[f.workSetup]:''}, ${esc(f.country)}`;
   const box=inner=>`<div class="panel" style="margin-bottom:12px;color:var(--mut);font-size:13px;line-height:1.6">${inner}</div>`;
@@ -1436,16 +1741,16 @@ function renderLiveSummary(){
   const r=m.rejected||{};
   const why=Object.entries(r).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1])
     .map(([k,n])=>`${n.toLocaleString()} ${esc((REJECT_LABEL[k]||k).replace('{days}',daysLabel()).replace('{setup}',(WS_LABEL[f.workSetup]||'').toLowerCase()).replace('{country}',f.country))}`);
-  const tally=`Checked ${Number(m.scanned||0).toLocaleString()} live postings${m.checked?` and ${m.checked} shortlisted companies' careers feeds`:''}.${why.length?' Left out: '+why.join(' · ')+'.':''}`;
+  const tally=`Checked ${Number(m.scanned||0).toLocaleString()} live postings from employers’ own hiring systems and remote job boards${m.checked?`, including ${m.checked} companies’ careers feeds`:''}.${why.length?' Left out: '+why.join(' · ')+'.':''}`;
   if(!liveN){
     el.innerHTML=box(`🔍 No opening matched <b>all</b> of your search profile (${esc(scope)}). ${tally}
-      <br>Coverage is strongest for remote roles and for companies using Greenhouse, Lever or Ashby. Try a wider <b>Posted within</b>, another position, or more skills.${sugN?' The recruiter\'s shortlist is below.':''}${otherCountry}`);
+      <br>Nothing is shown that could not be confirmed. Try a wider <b>Posted within</b>, another position or more skills — or search the big job sites with the buttons below, which Offerly cannot read for you.${sugN?' The recruiter\'s shortlist is below too.':''}${otherCountry}`);
     return;
   }
-  el.innerHTML=box(`✅ <b>${liveN}</b> live opening${liveN===1?'':'s'} matching ${esc(scope)}, your positions and your skills — each link opened and checked just now. ${tally}${otherCountry}`);
+  el.innerHTML=box(`✅ <b>${confN}</b> opening${confN===1?'':'s'} confirmed on the employer’s own hiring system${boardN?` and <b>${boardN}</b> job-board listing${boardN===1?'':'s'}`:''}, matching ${esc(scope)}, your positions and your skills — every link opened and checked just now. ${tally}${otherCountry}`);
 }
 
-const CATLABEL={live:'✅ Live openings',high:'🟢 High-probability',medium:'🟡 Medium-probability',stretch:'🔵 Stretch'};
+const CATLABEL={live:'✅ Confirmed openings',board:'🟡 Job-board listings',high:'🟢 Suggested · high-probability',medium:'🟡 Suggested · medium-probability',stretch:'🔵 Suggested · stretch'};
 const WS_LABEL={'':'Any setup',remote:'Remote',hybrid:'Hybrid',onsite:'On-site'};
 const DAYS_LABEL={1:'past 24 hours',3:'past 3 days',7:'past week',14:'past 2 weeks',30:'past month',0:'any time'};
 function daysLabel(){return DAYS_LABEL[state.filters.days]||('past '+state.filters.days+' days');}
@@ -1491,12 +1796,14 @@ function renderJobs(){
     wrap.innerHTML=`<div class="jobs">${list.map(cardHTML).join('')}</div>`;
   }else{ // grouped by category, verified openings first
     let h='';
-    ['live','high','medium','stretch'].forEach(cat=>{
+    ['live','board','high','medium','stretch'].forEach(cat=>{
       const g=list.filter(j=>j.category===cat);
       if(!g.length)return;
       const sub=cat==='live'
-        ? `posted in the ${daysLabel()}${state.filters.workSetup?' · '+WS_LABEL[state.filters.workSetup]:''} — checked just now against public job feeds`
-        : 'companies that hire this profile; the links open a search filtered to your dates';
+        ? `posted in the ${daysLabel()}${state.filters.workSetup?' · '+WS_LABEL[state.filters.workSetup]:''} — each one listed right now on the employer’s own hiring system, with the employer’s own date and place`
+        : cat==='board'
+        ? 'open on a job board just now, but the employer has no public hiring system to check them against — the date and place are the board’s, so confirm them on the page before applying'
+        : 'companies that hire this profile — not openings; the links open a search filtered to your dates';
       h+=`<div style="margin:6px 0 4px;font-weight:700;color:var(--mut);font-size:14px">${CATLABEL[cat]} · ${g.length}</div>
           <div style="margin:0 0 12px;color:var(--mut);font-size:12px">${esc(sub)}</div>
           <div class="jobs" style="margin-bottom:22px">${g.map(cardHTML).join('')}</div>`;
@@ -1525,7 +1832,7 @@ function cardHTML(j){
     </div>
     <div class="reasons">${reasons}</div>
     ${miss}
-    <div class="applyvia"><span class="via-dot">🔍</span> Suggested — no verified opening found. The button opens a <b>${badge.search?'search on '+badge.label:badge.label}</b> filtered to the ${daysLabel()}; it may return nothing if this company has not posted recently.</div>
+    <div class="applyvia"><span class="via-dot">🔍</span><span>Suggested — no verified opening found. The button opens a <b>${badge.search?'search on '+badge.label:badge.label}</b> filtered to the ${daysLabel()}; it may return nothing if this company has not posted recently.</span></div>
     <div class="sublinks">
       <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in LinkedIn</a>
       <a href="${indeedURL(j)}" target="_blank" rel="noopener">Indeed</a>
@@ -1540,7 +1847,18 @@ function cardHTML(j){
    them plainly instead of a fit score the recruiter model never gave it. */
 function liveCardHTML(j){
   const ago=timeAgo(j._postedAt);
-  const ws=j._workplace?`<span class="chip">${esc(WS_LABEL[j._workplace]||j._workplace)}</span>`:'';
+  const wsTitle=j._wsInferred?' title="The posting names a place and offers no remote or hybrid option"':'';
+  const ws=j._workplace?`<span class="chip"${wsTitle}>${esc(WS_LABEL[j._workplace]||j._workplace)}${j._wsInferred?'*':''}</span>`:'';
+  const src=esc(j._source||'the source');
+  let how;
+  if(j._confirmed){
+    how=`<span class="via-dot">✅</span> Confirmed on ${esc(j.company)}’s own hiring system (${src})${j._foundVia?`, found through ${esc(j._foundVia)}`:''} — posted ${esc(ago||'recently')}. `
+      +(j._linkState==='exact'?'Link opened just now: it goes to this posting and it is open.'
+        :j._linkState==='employer'?'The employer’s system lists it right now and its page loads; the page builds itself in your browser, so its text could not be read here.'
+        :'The employer’s system lists it right now. Its website blocks automated visits, so the page could not be opened here — the link is the one the employer publishes.');
+  }else{
+    how=`<span class="via-dot">🟡</span> Listed on <b>${src}</b> — posted ${esc(ago||'recently')} by ${src}’s date. The link was opened just now and the posting is open, but ${esc(j.company)} has no public hiring system to confirm the date and place against.`;
+  }
   return `<div class="job">
     <div class="top">
       <div>
@@ -1551,14 +1869,9 @@ function liveCardHTML(j){
         <span class="chip good">${esc(ago||'live')}</span>${ws}
       </div>
     </div>
-    ${j._skills.length?`<div class="matchline">Matches your skills: ${j._skills.map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div>`:''}
-    <div class="applyvia"><span class="via-dot">✅</span> ${j._direct?'On the employer’s own careers page':'Open now on <b>'+esc(j._source||'a live feed')+'</b>'} — posted ${esc(ago||'recently')}.
-      ${j._linkState==='exact'?'Link opened just now: it goes to this posting and it is still open.'
-        :'Listed on '+esc(j._source||'the source')+'’s live feed just now. The site blocks automated visits, so its page could not be opened for a check.'}</div>
-    <div class="sublinks">
-      <a href="${linkedinURL(j)}" target="_blank" rel="noopener">in Similar on LinkedIn</a>
-      ${j.careerDomain?`<a href="${careerURL(j)}" target="_blank" rel="noopener">Careers site ↗</a>`:''}
-    </div>
+    ${j._matchedRole?`<div class="matchline">Your position: <span class="chip">${esc(j._matchedRole)}</span></div>`:''}
+    ${j._skills.length?`<div class="matchline">Your skills in the posting: ${j._skills.map(x=>`<span class="chip good">${esc(x)}</span>`).join('')}</div>`:''}
+    <div class="applyvia" style="align-items:flex-start">${how.replace(/^(<span class="via-dot">[^<]*<\/span>)\s*([\s\S]*)$/,'$1<span>$2</span>')}</div>
     <div class="actions">
       <a class="btn apply" href="${esc(safeURL(j._url))}" target="_blank" rel="noopener">↗ Open this posting</a>
       <button class="btn mail" id="mail-${j._i}" onclick="openEmailDraft(${j._i})">✉️ Apply by Email</button>
@@ -1647,6 +1960,131 @@ function indeedURL(j){
 /* Glassdoor's own search needs an internal location id to filter by country, and a
    search without one is worldwide. A site search keeps the country and the date. */
 function glassdoorURL(j){return siteSearch('glassdoor.com',j);}
+/* ---------- the big job sites, searched in your own browser ----------
+   LinkedIn, Indeed, Bayt and the rest have no public feed and forbid other apps from
+   reading their listings, so nothing from them is in the checked list above. Each
+   button opens that site's own search instead, for the chosen position, in the target
+   country, filtered by date and work setup where the site's address can say so. The
+   formats were each opened in a real browser; sites whose own search could not be
+   addressed that way are searched through Google, restricted to the site. */
+const slugOf=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+function siteQ(domain,q,place){return `https://www.google.com/search?q=${enc('site:'+domain+' "'+q+'"'+(place?' '+place:''))}`+googleFilter();}
+function gjChips(){const d=state.filters.days;if(!d)return '';return '&htichips='+enc('date_posted:'+(d<=1?'today':d<=3?'3days':d<=7?'week':'month'));}
+const BAYT_SLUG={'Saudi Arabia':'saudi-arabia','United Arab Emirates':'uae','Qatar':'qatar','Pakistan':'pakistan','Egypt':'egypt','India':'india'};
+const GULF_SLUG={'Saudi Arabia':'saudi-arabia','United Arab Emirates':'uae','Qatar':'qatar'};
+const SEEK_HOST={'Australia':'www.seek.com.au','New Zealand':'www.seek.co.nz','Hong Kong':'hk.jobsdb.com','Malaysia':'my.jobstreet.com','Singapore':'sg.jobstreet.com'};
+const DAYS_OK=(list,d)=>list.includes(d)?d:0;
+const JOB_SITES={
+  linkedin:{label:'LinkedIn',url:q=>`https://www.linkedin.com/jobs/search/?keywords=${enc(q)}&location=${enc(liPlace())}`+liFilter()},
+  indeed:{label:'Indeed',url:q=>{
+    if(isGlobal())return `https://www.indeed.com/jobs?q=${enc(q)}&l=Remote`+indeedFilter();
+    const host=INDEED_HOST[curCountry()];
+    return host?`https://${host}.indeed.com/jobs?q=${enc(q+wsWord())}${host==='www'?'&l=United+States':''}`+indeedFilter():siteQ('indeed.com',q,searchPlace());
+  }},
+  googlejobs:{label:'Google Jobs',url:q=>`https://www.google.com/search?q=${enc(q+' jobs '+(isGlobal()?'remote':'in '+curCountry())+wsWord())}&ibp=htl;jobs`+gjChips()},
+  glassdoor:{label:'Glassdoor',url:q=>siteQ('glassdoor.com',q,searchPlace())},
+  bayt:{label:'Bayt',url:q=>BAYT_SLUG[curCountry()]?`https://www.bayt.com/en/${BAYT_SLUG[curCountry()]}/jobs/${slugOf(q)}-jobs/`:siteQ('bayt.com',q,searchPlace())},
+  // GulfTalent's own search runs in the page and its title pages exist only for titles
+  // on its list ("qa-lead" does, "sqa-lead" falls back to the home page).
+  gulftalent:{label:'GulfTalent',url:q=>siteQ('gulftalent.com',q,searchPlace())},
+  naukrigulf:{label:'NaukriGulf',url:q=>GULF_SLUG[curCountry()]?`https://www.naukrigulf.com/${slugOf(q)}-jobs-in-${GULF_SLUG[curCountry()]}`:siteQ('naukrigulf.com',q,searchPlace())},
+  jadarat:{label:'Jadarat',note:'Saudi national jobs portal',url:q=>siteQ('jadarat.sa',q,'')},
+  tanqeeb:{label:'Tanqeeb',url:q=>siteQ('tanqeeb.com',q,searchPlace())},
+  dubizzle:{label:'Dubizzle Jobs',url:q=>siteQ('dubizzle.com',q,'jobs')},
+  rozee:{label:'Rozee.pk',url:q=>`https://www.rozee.pk/job/jsearch/q/${slugOf(q)}`},
+  mustakbil:{label:'Mustakbil',url:q=>`https://www.mustakbil.com/jobs/search?keywords=${enc(q)}`},
+  brightspyre:{label:'BrightSpyre',url:q=>siteQ('brightspyre.com',q,'')},
+  naukri:{label:'Naukri',url:q=>`https://www.naukri.com/${slugOf(q)}-jobs`+(state.filters.days?`?jobAge=${state.filters.days}`:'')},
+  foundit:{label:'foundit',url:q=>`https://www.foundit.in/srp/results?query=${enc(q)}`},
+  totaljobs:{label:'Totaljobs',url:q=>{const d=DAYS_OK([1,3,7,14],state.filters.days);return `https://www.totaljobs.com/jobs/${slugOf(q)}`+(d?`?postedWithin=${d}`:'');}},
+  reed:{label:'Reed',url:q=>`https://www.reed.co.uk/jobs/${slugOf(q)}-jobs`+(state.filters.days&&state.filters.days<=7?'?dateCreatedOffSet=lastweek':'')},
+  cvlibrary:{label:'CV-Library',url:q=>`https://www.cv-library.co.uk/${slugOf(q)}-jobs`},
+  stepstone:{label:'StepStone',url:q=>{const d=state.filters.days;return `https://www.stepstone.de/jobs/${slugOf(q)}`+(d===1?'?ag=age_1':d&&d<=7?'?ag=age_7':'');}},
+  xing:{label:'XING',url:q=>`https://www.xing.com/jobs/search?keywords=${enc(q)}`},
+  seek:{label:c=>/hong kong/i.test(c)?'JobsDB':/malaysia|singapore/i.test(c)?'Jobstreet':'SEEK',url:q=>{const h=SEEK_HOST[curCountry()];const d=state.filters.days;return h?`https://${h}/${slugOf(q)}-jobs`+(d?`?daterange=${Math.min(d,31)}`:''):siteQ('seek.com.au',q,'');}},
+  mycareersfuture:{label:'MyCareersFuture',url:q=>`https://www.mycareersfuture.gov.sg/search?search=${enc(q)}`},
+  ziprecruiter:{label:'ZipRecruiter',url:q=>`https://www.ziprecruiter.com/jobs-search?search=${enc(q)}&location=${enc(isGlobal()?'Remote':'United States')}`+(state.filters.days?`&days=${state.filters.days}`:'')},
+  dice:{label:'Dice',url:q=>{const d=state.filters.days;return `https://www.dice.com/jobs?q=${enc(q)}`+(d?'&filters.postedDate='+(d<=1?'ONE':d<=3?'THREE':d<=7?'SEVEN':'THIRTY'):'');}},
+  monster:{label:'Monster',url:q=>`https://www.monster.com/jobs/search?q=${enc(q)}`},
+  jobbank:{label:'Job Bank',url:q=>`https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=${enc(q)}`},
+  wellfound:{label:'Wellfound',note:'startups',url:q=>siteQ('wellfound.com',q,isGlobal()?'remote':searchPlace())},
+  weworkremotely:{label:'We Work Remotely',url:q=>siteQ('weworkremotely.com',q,'')},
+  remoteok:{label:'Remote OK',url:q=>siteQ('remoteok.com',q,'')},
+  workingnomads:{label:'Working Nomads',url:q=>siteQ('workingnomads.com',q,'')},
+  wuzzuf:{label:'Wuzzuf',url:q=>`https://wuzzuf.net/search/jobs/?q=${enc(q)}`},
+  jobberman:{label:'Jobberman',url:q=>`https://www.jobberman.com/jobs?q=${enc(q)}`},
+  brightermonday:{label:'BrighterMonday',url:q=>siteQ('brightermonday.co.ke',q,'')},
+  pnet:{label:'PNet',url:q=>`https://www.pnet.co.za/jobs/${slugOf(q)}`},
+  computrabajo:{label:'Computrabajo',url:q=>siteQ('computrabajo.com',q,searchPlace())},
+  kariyer:{label:'Kariyer.net',url:q=>siteQ('kariyer.net',q,'')},
+  daijob:{label:'Daijob',url:q=>`https://www.daijob.com/en/jobs/search_result?keywords=${enc(q)}`},
+};
+const SITES_FOR={
+  'Saudi Arabia':['bayt','gulftalent','naukrigulf','jadarat','tanqeeb'],
+  'United Arab Emirates':['bayt','gulftalent','naukrigulf','dubizzle'],
+  'Qatar':['bayt','gulftalent','naukrigulf'],
+  'Pakistan':['rozee','mustakbil','brightspyre','bayt'],
+  'India':['naukri','foundit'],
+  'United Kingdom':['totaljobs','reed','cvlibrary'],
+  'Germany':['stepstone','xing'],'Austria':['xing'],'Switzerland':['xing'],
+  'United States':['ziprecruiter','dice','monster','wellfound'],
+  'Canada':['jobbank'],
+  'Singapore':['mycareersfuture','seek'],'Malaysia':['seek'],'Australia':['seek'],'New Zealand':['seek'],'Hong Kong':['seek'],
+  'Japan':['daijob'],'Egypt':['wuzzuf','bayt'],'Nigeria':['jobberman'],'Kenya':['brightermonday'],'South Africa':['pnet'],
+  'Mexico':['computrabajo'],'Turkey':['kariyer'],
+};
+const EVERYWHERE=['linkedin','indeed','googlejobs','glassdoor'];
+const REMOTE_SITES=['weworkremotely','remoteok','workingnomads','wellfound','ziprecruiter'];
+// The main cities a web search should also name, where a country is searched.
+const MAIN_CITIES={'Saudi Arabia':['Riyadh','Jeddah','Dammam'],'United Arab Emirates':['Dubai','Abu Dhabi'],'Qatar':['Doha'],
+  'Pakistan':['Karachi','Lahore','Islamabad'],'India':['Bengaluru','Hyderabad','Pune'],'United Kingdom':['London','Manchester'],
+  'Germany':['Berlin','Munich'],'Netherlands':['Amsterdam'],'Canada':['Toronto','Vancouver'],'Australia':['Sydney','Melbourne'],
+  'Singapore':[],'Egypt':['Cairo']};
+const ATS_SITES_Q=['boards.greenhouse.io','jobs.lever.co','jobs.ashbyhq.com','apply.workable.com','myworkdayjobs.com','jobs.smartrecruiters.com','recruitee.com','breezy.hr'];
+const BOARD_SITES_Q=['linkedin.com','indeed.com','glassdoor.com','bayt.com','naukrigulf.com','gulftalent.com','rozee.pk','naukri.com'];
+/* Employers' own job pages, found by a web search: postings on the hiring systems
+   companies use, and companies' own careers pages, leaving the big boards out. */
+function directSearches(q){
+  const places=isGlobal()?['remote']:[curCountry(),...(MAIN_CITIES[curCountry()]||[]).slice(0,2)];
+  const where='('+places.map(p=>'"'+p+'"').join(' OR ')+')';
+  const roles='('+[...new Set([q,...(state.tags.roles||[]).filter(r=>r!==q)])].slice(0,2).map(r=>'"'+r+'"').join(' OR ')+')';
+  const ats=roles+' '+where+' ('+ATS_SITES_Q.map(s=>'site:'+s).join(' OR ')+')';
+  const careers='"'+q+'" '+where+' (careers OR "job openings" OR "join our team") '+BOARD_SITES_Q.map(s=>'-site:'+s).join(' ');
+  const d=state.filters.days, bing=d?'&filters='+enc('ex1:"ez'+(d<=1?1:d<=7?2:3)+'"'):'';
+  return [
+    {label:'Employer job systems · Google',url:`https://www.google.com/search?q=${enc(ats)}`+googleFilter()},
+    {label:'Employer job systems · Bing',url:`https://www.bing.com/search?q=${enc(ats)}`+bing},
+    {label:'Company careers pages · Google',url:`https://www.google.com/search?q=${enc(careers)}`+googleFilter()},
+  ];
+}
+function siteBtn(id,q){
+  const s=JOB_SITES[id]; if(!s)return '';
+  const label=typeof s.label==='function'?s.label(curCountry()):s.label;
+  const url=s.url(q), viaGoogle=/^https:\/\/www\.google\.com\/search\?q=site/.test(url);
+  const note=[s.note,viaGoogle?'via Google':''].filter(Boolean).join(' · ');
+  return `<a class="sitebtn" href="${esc(safeURL(url))}" target="_blank" rel="noopener"${viaGoogle?` title="${esc(label)}’s own search cannot be opened with the position filled in, so this is a Google search of ${esc(label)}"`:''}>${esc(label)}${note?` <small>${esc(note)}</small>`:''} ↗</a>`;
+}
+function renderJobSites(){
+  const el=$('jobSites'); if(!el)return;
+  if(!state.searched){el.innerHTML='';return;}
+  const roles=state.tags.roles||[];
+  if(!roles.length){el.innerHTML='';return;}
+  const cur=state.siteRole&&roles.includes(state.siteRole)?state.siteRole:roles[0];
+  const c=curCountry(), local=isGlobal()?[]:(SITES_FOR[c]||[]);
+  const remote=isGlobal()||state.filters.workSetup==='remote';
+  const group=(title,ids)=>ids.length?`<div class="sitegrp"><h4>${esc(title)}</h4><div class="sitebtns">${ids.map(id=>siteBtn(id,cur)).join('')}</div></div>`:'';
+  el.innerHTML=`<div class="panel" style="margin:6px 0 18px">
+    <div class="sp-head"><b>🔎 Search the big job sites too</b>
+      <span class="note" style="margin:0">LinkedIn, Indeed, Bayt and the other big boards don’t let other apps read their listings, so they are not in the checked list above. Each button opens that site’s own search for this position${isGlobal()?' (remote)':' in '+esc(c)}, ${esc(daysLabel())}${state.filters.workSetup?', '+esc(WS_LABEL[state.filters.workSetup]).toLowerCase():''} where the site can filter that way.</span></div>
+    <div class="field" style="max-width:360px;margin:6px 0 4px"><label class="lab" for="siteRole">Position</label>
+      <select id="siteRole" onchange="state.siteRole=this.value;renderJobSites()">${roles.map(r=>`<option${r===cur?' selected':''}>${esc(r)}</option>`).join('')}</select></div>
+    ${group(isGlobal()?'':'In '+c,local)}
+    ${group('Everywhere',EVERYWHERE)}
+    ${remote?group('Remote job boards',REMOTE_SITES.filter(id=>!local.includes(id))):''}
+    <div class="sitegrp"><h4>Employers’ own job pages, through a web search</h4><div class="sitebtns">${directSearches(cur).map(s=>`<a class="sitebtn" href="${esc(safeURL(s.url))}" target="_blank" rel="noopener">${esc(s.label)} ↗</a>`).join('')}</div></div>
+  </div>`;
+}
+
 
 /* ---------- email apply: generate → review → send ---------- */
 function buildSignature(){
@@ -1883,18 +2321,202 @@ async function testMail(){
   b.disabled=false;b.textContent='Save and test';
 }
 
-/* ---------- fix my resume: rewrite -> review -> PDF ---------- */
-function buildResumeFixPrompt(){
-  const a=state.lastAnalysis||{};
-  const improvements=(state.resumeImprovements||[]).map(it=>`- [${(it.priority||'').toUpperCase()}] ${it.title}: ${it.detail}`).join('\n')||'(none specific — improve general ATS readiness)';
-  const quickFixes=(a.ats&&a.ats.quickFixes||[]).map(f=>'- '+f).join('\n');
-  const gaps=(a.gaps||[]).join(', ');
-  return `You are an expert resume writer and ATS optimization specialist for the ${state.country||'global'} hiring market. Rewrite the candidate's resume below to fix the issues listed, while preserving every true fact — never invent employers, titles, dates, degrees, numbers or skills that are not already in the original resume.
+/* ---------- fix my resume: rewrite in its own format -> review -> PDF ----------
+   The uploaded resume is rebuilt as a page that looks like it (resumeformat.js), and
+   the AI rewrites that page's paragraphs in place, so the fonts, colours, bullets,
+   columns and dates stay where they were. The reviewed page is printed to PDF by
+   the local browser engine, with page breaks that never split a line or a bullet.
+   If the layout cannot be rebuilt (a scanned PDF, say), the old plain-text rewrite
+   and simple PDF are used instead. */
+// What the rewrite should fix: the live ATS checks it can fix (with the paragraphs
+// each concerns), the recruiter's review, and the market advice from Analyze.
+function fixContext(ats){
+  const lines=[];
+  const a=ats||state.ats;
+  if(a){
+    for(const f of a.fixes){
+      if(f.fixable!=='ai')continue;
+      lines.push(`- ${f.label}: ${f.detail} ${f.fix}`+(f.blocks&&f.blocks.length?` (blocks ${f.blocks.slice(0,24).join(', ')})`:''));
+    }
+    const nums=a.fixes.find(f=>f.id==='numbers');
+    if(nums)lines.push(`- ${nums.detail} Where a bullet already has a number, lead with it. Never add a number that is not already in the resume.`);
+  }
+  const r=state.review;
+  if(r&&(r.issues||[]).length)lines.push(...r.issues.map(i=>`- Recruiter: ${i.title} — ${i.detail}`));
+  for(const it of state.resumeImprovements||[])lines.push(`- ${it.title}: ${it.detail}`);
+  const an=state.lastAnalysis||{};
+  for(const q of (an.ats&&an.ats.quickFixes)||[])lines.push('- '+q);
+  const gaps=(an.gaps||[]).join(', ');
+  return 'WHAT TO FIX:\n'+(lines.length?lines.join('\n'):'- Tighten wording and strengthen verbs where it clearly helps.')
+    +(gaps?`\n\nMARKET GAPS — address only where the resume already shows the experience: ${gaps}`:'');
+}
+// British or American spelling, as the resume already writes it.
+function spellingOf(text){
+  const uk=(String(text).match(/\b\w+(?:ised|ising|isation|yse|ysed|our)\b/gi)||[]).length;
+  const us=(String(text).match(/\b\w+(?:ized|izing|ization|yze|yzed|or)\b/gi)||[]).length;
+  return uk>us?'British (optimise, analyse, colour)':'American (optimize, analyze, color)';
+}
+// Per paragraph, what the checks found wrong with it.
+const FLAG_OF={verbs:'weak opening verb',pronouns:'uses I/my',cliches:'cliché',aitells:'AI-sounding word',passive:'passive voice',bulletlen:'too long',numbers:'no number'};
+function flagsById(a){
+  const m=new Map();
+  for(const f of (a&&a.fixes)||[])for(const id of f.blocks||[]){if(!FLAG_OF[f.id])continue;if(!m.has(id))m.set(id,[]);m.get(id).push(FLAG_OF[f.id]);}
+  return m;
+}
+const capOf=b=>Math.round(b.text.length*1.2+15);
+/* `editIds`: the paragraphs this call may rewrite. The rewrite is split into small
+   parts run side by side — one call for a whole resume took longer than the agent's
+   time limit — and every part still sees the whole resume, so neighbouring bullets
+   do not end up opening with the same verb. */
+function buildBlockFixPrompt(blocks,ats,editIds){
+  const flags=flagsById(ats);
+  const may=b=>b.editable&&(!editIds||editIds.has(b.id));
+  let listed='', n=0;
+  for(const b of blocks){
+    // Each paragraph gets a length budget, so the rewrite keeps the page count.
+    const cap=may(b)?` max ${capOf(b)} chars`:'';
+    const f=may(b)&&flags.get(b.id)?' ! '+flags.get(b.id).join(', '):'';
+    const line=`[${b.id} ${may(b)?'EDIT':'KEEP'}${cap}${b.bullet?' •':''}${b.heading?' HEADING':''}${f}] ${b.text}\n`;
+    if(n+line.length>15000)break;
+    listed+=line; n+=line.length;
+  }
+  return `You are an experienced resume writer. The candidate's resume is below as numbered blocks in reading order, exactly as laid out in their own file. Improve the blocks marked EDIT; after "!" a block lists what an ATS check found wrong with it. Blocks marked KEEP (name, headings, contact details, job-title and date lines) are context only and must not be returned.
 
-IMPROVEMENTS TO APPLY:
-${improvements}
-${quickFixes?`\nATS QUICK FIXES TO APPLY:\n${quickFixes}`:''}
-${gaps?`\nMARKET GAPS TO ADDRESS ONLY IF SUPPORTED BY REAL EXPERIENCE BELOW (never fabricate): ${gaps}`:''}
+${fixContext(ats)}
+
+Facts:
+- Preserve every true fact. Never invent employers, titles, dates, degrees, tools, skills, results or numbers.
+- Never add a number that is not already in the resume, and do not compute new ones (no percentages worked out from other figures).
+- Never add a result, benefit or claim the resume does not state ("improving reliability", "reducing costs") — better wording of what is there, not new content.
+- Never add a tool, language, skill, method or certification that the resume does not already name — even when a recruiter note says it is "missing". That is for the candidate to add, not you.
+- Never say a tool or language was used in a job unless that job's own text already says so.
+- Never change what a number measures or what it is linked to: "99.95% quality assurance score" stays a quality assurance score.
+
+Write like the candidate, not like an AI — a recruiter should not be able to tell a tool touched it:
+- Plain, specific verbs a person would use: led, built, ran, cut, set up, wrote, tested, automated, moved, fixed, trained, hired.
+- Never use: spearheaded, leveraged, utilized, orchestrated, seamless, robust, cutting-edge, pivotal, fostered, showcased, harnessed, bolstered, meticulous, transformative, synergy, impactful, "in today's", "fast-paced", "a testament to", "drive impact".
+- No stock phrases: results-oriented, results-driven, team player, detail-oriented, proven track record, passionate, committed to excellence.
+- Vary how bullets start; never open two neighbouring bullets with the same verb.
+- Do not tack on "…, resulting in …", "…, ensuring …" or "…, enabling …" unless the resume states that result.
+- No em dashes (—) and no semicolons in bullets. Short, direct sentences; no filler adjectives ("comprehensive", "extensive", "significant", "various").
+- Keep the candidate's own terms, product names and spelling: ${spellingOf(state.resumeText)}.
+
+Form:
+- Change a block only where it clearly helps. Stay within each EDIT block's "max N chars" so the layout and page count stay the same.
+- One block stays one block: a bullet stays one bullet, with no line breaks. Keep a leading label such as "Languages:" exactly.
+- Plain text only: no markdown, no asterisks, no bullet characters at the start.
+
+Reply with ONLY this JSON object (no markdown, no commentary):
+{"edits":[{"id":12,"text":"rewritten block"}],"changes":["short description of one concrete improvement made","..."]}
+Only include blocks you changed. Include ${editIds?'1-3':'4-8'} items in "changes".
+Recruiter notes above may give example numbers ("300+ test cases"): they are examples, not facts — never use them.
+
+RESUME BLOCKS:
+${listed}`;
+}
+// The paragraphs to rewrite, in parts of a few each, in reading order.
+function fixParts(blocks,size=8){
+  const ids=blocks.filter(b=>b.editable).map(b=>b.id), parts=[];
+  for(let i=0;i<ids.length;i+=size)parts.push(new Set(ids.slice(i,i+size)));
+  return parts;
+}
+// Several calls at a time, not all at once: each one is an agent process.
+async function inParallel(items,limit,fn){
+  const out=new Array(items.length);let next=0;
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{
+    while(next<items.length){const i=next++;try{out[i]=await fn(items[i],i);}catch(e){out[i]={error:e};}}
+  }));
+  return out;
+}
+// Checks on each rewritten paragraph before it is used. A number the resume does not
+// contain is never let through; machine-sounding wording and overlong paragraphs get
+// one more try, then plain words.
+const PLAIN_WORD={spearheaded:'led',spearheading:'leading',leveraged:'used',leveraging:'using',leverages:'uses',utilized:'used',utilizing:'using',utilize:'use',utilised:'used',
+  orchestrated:'coordinated',orchestrating:'coordinating',seamless:'smooth',seamlessly:'smoothly',robust:'reliable','cutting-edge':'modern','state-of-the-art':'modern',
+  pivotal:'key',fostered:'built',fostering:'building',showcasing:'showing',showcased:'showed',harnessed:'used',harnessing:'using',bolstered:'strengthened',
+  meticulous:'careful',meticulously:'carefully',transformative:'major',empowered:'helped',empowering:'helping',elevated:'raised',elevating:'raising',impactful:'effective'};
+const hasPhrase=(t,w)=>new RegExp('(^|[^A-Za-z])'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![A-Za-z])','i').test(t);
+const numbersIn=s=>(String(s).match(/\d+(?:[.,]\d+)*/g)||[]).map(x=>x.replace(/,/g,''));
+/* Names of tools, technologies, products and organisations in a piece of text: a
+   known skill, an acronym, a word written with digits or symbols (K6.io, C#), or a
+   capitalised word that does not start a sentence. */
+const KNOWN_TERMS=new Set([...SKILL_WORDS.map(w=>w.toLowerCase()),'git','jira','cucumber','gherkin','bdd','tdd','testng','junit','pytest','jest','mocha','selenium','playwright','cypress','appium','jmeter','k6','postman','soapui','loadrunner','jenkins','docker','kubernetes','aws','azure','gcp','terraform','ansible','sql','nosql','graphql','rest','soap','oauth','kafka','redis','linux','bash','python','java','javascript','typescript','c#','.net','node.js','react','angular','vue']);
+function termsIn(s){
+  const out=new Set();
+  const t=String(s||'');
+  for(const m of t.matchAll(/[A-Za-z][A-Za-z0-9+#./-]*[A-Za-z0-9+#]|[A-Za-z]/g)){
+    const w=m[0].replace(/[./-]+$/,''), lw=w.toLowerCase();
+    const before=t.slice(0,m.index).trimEnd();
+    const startsSentence=!before||/[.:;!?•]$/.test(before);
+    if(KNOWN_TERMS.has(lw)||/^[A-Z]{2,}[0-9]*$/.test(w)||/[0-9+#]/.test(w)||(/^[A-Z]/.test(w)&&!startsSentence&&w.length>1))out.add(lw);
+  }
+  for(const k of KNOWN_TERMS)if(k.includes(' ')&&t.toLowerCase().includes(k))out.add(k);
+  return out;
+}
+// The text of the job a paragraph sits in: the paragraphs between the job's own
+// title-and-date line and the next one (or the next heading).
+function jobTextOf(blocks,id){
+  const i=blocks.findIndex(b=>b.id===id);
+  if(i<0)return '';
+  const boundary=b=>b.heading||b.row||(!b.editable&&/\b(?:19|20)\d{2}\b/.test(b.text));
+  let a=i,z=i;
+  while(a>0&&!boundary(blocks[a-1]))a--;
+  while(z<blocks.length-1&&!boundary(blocks[z+1]))z++;
+  return blocks.slice(Math.max(0,a-1),z+1).map(b=>b.text).join(' ');
+}
+function vetEdit(orig,text,cap,known,ctx={}){
+  const issues=[];
+  const fresh=numbersIn(text).filter(n=>!known.has(n));
+  if(fresh.length)issues.push({kind:'number',msg:`it adds ${fresh.map(n=>'"'+n+'"').join(', ')}, which is not in the resume — use only the resume's own numbers`});
+  // A tool or name the resume never mentions is a new claim, whoever suggested it.
+  if(ctx.all){
+    const added=[...termsIn(text)].filter(w=>!termsIn(orig).has(w)&&!ctx.all.includes(w));
+    if(added.length)issues.push({kind:'fact',msg:`it adds ${added.map(w=>'"'+w+'"').join(', ')}, which the resume never mentions — do not add tools, skills or names`});
+    // Named in the resume, but not for this job: saying it was used here is new too.
+    const job=String(ctx.job||'').toLowerCase();
+    const moved=[...termsIn(text)].filter(w=>KNOWN_TERMS.has(w)&&!termsIn(orig).has(w)&&ctx.all.includes(w)&&!job.includes(w));
+    if(moved.length)issues.push({kind:'fact',msg:`it says ${moved.map(w=>'"'+w+'"').join(', ')} was used in this job, which this job's own text does not say`});
+  }
+  const tells=ATSScore.AI_TELLS.filter(w=>hasPhrase(text,w)&&!hasPhrase(orig,w));
+  if(tells.length)issues.push({kind:'tell',words:tells,msg:`it uses ${tells.map(w=>'"'+w+'"').join(', ')}, which reads as machine-written`});
+  const cl=ATSScore.CLICHES.filter(w=>hasPhrase(text,w)&&!hasPhrase(orig,w));
+  if(cl.length)issues.push({kind:'cliche',msg:`it adds the stock phrase ${cl.map(w=>'"'+w+'"').join(', ')}`});
+  if(/—/.test(text)&&!/—/.test(orig))issues.push({kind:'dash',msg:'it uses an em dash'});
+  if(text.length>cap*1.1)issues.push({kind:'long',msg:`it is ${text.length} characters, over the ${cap} allowed`});
+  return issues;
+}
+function plainWords(text){
+  let t=text;
+  for(const [w,p] of Object.entries(PLAIN_WORD))t=t.replace(new RegExp('(^|[^A-Za-z])('+w.replace(/-/g,'\\-')+')(?![A-Za-z])','gi'),(m,pre,word)=>pre+(word[0]===word[0].toUpperCase()?p[0].toUpperCase()+p.slice(1):p));
+  return t.replace(/\s*—\s*/g,', ');
+}
+// Months written one way, in every text on the page (dates live in rows the
+// rewrite does not touch).
+function normaliseDatesIn(doc){
+  let n=0;
+  const w=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
+  while(w.nextNode()){const t=w.currentNode,v=t.nodeValue,nv=ATSScore.normaliseDates(v);if(nv!==v){t.nodeValue=nv;n++;}}
+  return n;
+}
+function atsOfDoc(doc){
+  const blocks=ResumeFormat.blocks(doc);
+  const text=blocks.map(b=>(b.bullet?'• ':'')+b.text).join('\n');
+  // The rebuilt page is read in order, so the text layer's order is the reading order.
+  return ATSScore.score({text,rawText:text,blocks,meta:state.layoutMeta||{kind:fileKind()},tags:state.tags});
+}
+function renderFixScore(doc){
+  const el=$('resumeScore'); if(!el||!doc)return;
+  const now=atsOfDoc(doc), before=state._fixBefore;
+  state._fixAfter=now;
+  const d=before!=null?now.score-before:0;
+  el.innerHTML=`<b>ATS score: ${before!=null?before+' → ':''}${now.score}</b>${before!=null?` <span class="chip ${d>0?'good':d<0?'gap':''}" style="margin-left:6px">${d>0?'+':''}${d}</span>`:''}
+    <span class="note" style="margin:0 0 0 8px">${now.fixes.length?'Still open: '+now.fixes.slice(0,3).map(f=>esc(f.label)).join(' · ')+(now.fixes.some(f=>f.fixable==='you')?' — the ✍️ ones need your own facts.':''):'Every check passes.'}</span>`;
+}
+
+function buildResumeFixPrompt(){
+  return `You are an expert resume writer and ATS optimization specialist for the ${state.country||'global'} hiring market. Rewrite the candidate's resume below to fix the issues listed, while preserving every true fact — never invent employers, titles, dates, degrees, numbers or skills that are not already in the original resume. Write plainly, like the candidate would: no "spearheaded", "leveraged", "utilized", "results-driven" or other stock phrases.
+
+${fixContext()}
 
 Rules:
 - Plain text, ATS-friendly: clear section headers in CAPS on their own line (SUMMARY, EXPERIENCE, EDUCATION, SKILLS, etc.), no tables, columns, icons or graphics.
@@ -1911,16 +2533,129 @@ ORIGINAL RESUME:
 }
 async function openResumeFix(){
   if(!state.resumeText){toast('Upload a resume first');return;}
-  document.getElementById('resumeModal').classList.add('show');
+  $('resumeModal').classList.add('show');
   await runResumeFix();
 }
 async function regenResumeFix(){ await runResumeFix(); }
+
+// The page the rewrite starts from: the last version the person confirmed, or the
+// uploaded file rebuilt in its own format.
+async function formatBase(){
+  if(state.resumeDoc)return state.resumeDoc;
+  if(state.formatBase)return state.formatBase;
+  if(!window.ResumeFormat)throw new Error('The resume layout module did not load.');
+  const o=state.origResume;
+  const r=o?await ResumeFormat.build(o):ResumeFormat.fromText(state.resumeText);
+  state.formatBase=r.html;
+  return r.html;
+}
+function loadPreview(html){
+  const f=$('resumePreview');
+  return new Promise(res=>{
+    f.onload=()=>{
+      const doc=f.contentDocument;
+      // Fit the page to the preview's width; this zoom is taken off before printing.
+      const page=doc.querySelector('section.docx, .pg')||doc.body;
+      const w=Math.max(page.scrollWidth,page.getBoundingClientRect().width)+40;
+      const z=Math.min(1,(f.clientWidth-8)/w);
+      if(z<1)doc.documentElement.style.zoom=z.toFixed(3);
+      doc.body.contentEditable='true';
+      doc.body.spellcheck=true;
+      res(doc);
+    };
+    f.srcdoc=html;
+  });
+}
 async function runResumeFix(){
   setResumeFixLoading(true);
+  state._fixMode=null;
+  let doc=null;
   try{
-    const d=await callJSON(buildResumeFixPrompt());
-    state._resumeFixChanges=d.changes||[];
-    document.getElementById('resumeEditText').value=(d.resume||'').trim()||state.resumeText;
+    const html=await formatBase();
+    $('resumePreview').style.display='block';
+    $('resumeTextField').style.display='none';
+    doc=await loadPreview(html);
+  }catch(err){
+    console.warn('Layout rebuild failed',err);
+    $('resumeFormatNote').textContent='Your file\'s layout could not be rebuilt ('+(err.message||err)+'), so this is a plain-text version.';
+  }
+  try{
+    if(doc){
+      const blocks=ResumeFormat.blocks(doc);
+      if(!blocks.some(b=>b.editable))throw new Error('No paragraphs to improve were found in this resume.');
+      // The checks are run on this very page, so their paragraph numbers are its own.
+      const pageAts=atsOfDoc(doc);
+      const known=new Set([...numbersIn(state.resumeRaw||state.resumeText),...numbersIn(blocks.map(b=>b.text).join(' '))]);
+      // Everything the resume says, to check rewrites against: a tool it never names is a new claim.
+      const allText=[...termsIn([state.resumeRaw||'',state.resumeText||'',blocks.map(b=>b.text).join(' ')].join(' '))].join(' ')+' '+(state.resumeText||'').toLowerCase();
+      const byId=new Map(blocks.map(b=>[b.id,b]));
+      const parts=fixParts(blocks,7);
+      let finished=0;
+      const progress=()=>{const el=$('resumeFixLoading');if(el)el.dataset.note=`Rewriting your resume in ${parts.length} parts side by side — ${finished} of ${parts.length} done…`;const n=$('resumeFixProgress');if(n)n.textContent=el.dataset.note;};
+      progress();
+      const replies=await inParallel(parts,6,async ids=>{const r=await callJSON(buildBlockFixPrompt(blocks,pageAts,ids));finished++;progress();return r;});
+      const ok=replies.filter(r=>r&&!r.error);
+      if(!ok.length)throw (replies[0]&&replies[0].error)||new Error('The AI did not answer.');
+      // Each part may only change its own paragraphs.
+      const d={edits:[],changes:[]};
+      ok.forEach((r,i)=>{
+        const ids=parts[replies.indexOf(r)];
+        d.edits.push(...(Array.isArray(r.edits)?r.edits:[]).filter(e=>e&&ids.has(Number(e.id))));
+        d.changes.push(...(Array.isArray(r.changes)?r.changes:[]));
+      });
+      d.changes=[...new Set(d.changes)].slice(0,10);
+      const failedParts=replies.length-ok.length;
+      const good=[], retry=[], notes=failedParts?[`${failedParts} part${failedParts===1?'':'s'} of the resume could not be rewritten this time (the AI did not answer); press Rewrite again for them.`]:[];
+      for(const e of d.edits){
+        const b=e&&byId.get(Number(e.id));
+        if(!b||!b.editable||typeof e.text!=='string'||!e.text.trim())continue;
+        const issues=vetEdit(b.text,e.text,capOf(b),known,{all:allText,job:jobTextOf(blocks,b.id)});
+        if(issues.length)retry.push({b,e,issues}); else good.push(e);
+      }
+      // One more try for the edits that broke a rule, told exactly which.
+      if(retry.length){
+        const p2=`Some of your rewrites broke the rules. Rewrite each block below again, fixing exactly the problem named and keeping everything else. The same rules apply: every fact unchanged, no number that is not in the resume, plain wording a person would use, within the character limit.
+
+${retry.map(r=>`[${r.b.id} max ${capOf(r.b)} chars]\noriginal: ${r.b.text}\nyour rewrite: ${r.e.text}\nproblem: ${r.issues.map(i=>i.msg).join('; ')}`).join('\n\n')}
+
+Reply with ONLY this JSON object: {"edits":[{"id":12,"text":"rewritten block"}]}`;
+        try{
+          const d2=await callJSON(p2);
+          for(const e2 of (d2&&d2.edits)||[]){
+            const r=retry.find(x=>x.b.id===Number(e2.id));
+            if(!r||typeof e2.text!=='string')continue;
+            const again=vetEdit(r.b.text,e2.text,capOf(r.b),known,{all:allText,job:jobTextOf(blocks,r.b.id)});
+            if(!again.length){good.push(e2);r.done=true;} else {r.e=e2;r.issues=again;}
+          }
+        }catch(_){}
+        for(const r of retry.filter(x=>!x.done)){
+          // A number the resume does not have is never used: the paragraph stays as it was.
+          if(r.issues.some(i=>i.kind==='number'||i.kind==='fact')){notes.push(r.issues.some(i=>i.kind==='fact')?'Kept one paragraph as you wrote it: the rewrite named a tool or skill your resume does not claim for that job.':'Kept one paragraph as you wrote it: the rewrite added a number that is not in your resume.');continue;}
+          good.push({id:r.b.id,text:plainWords(r.e.text)});
+        }
+      }
+      const changed=ResumeFormat.apply(doc,good);
+      const dated=normaliseDatesIn(doc);
+      const reordered=state.ats&&state.ats.fixes.some(f=>f.id==='order');
+      state._resumeFixChanges=[...(d.changes||[]),
+        ...(dated?['Every date written the same way ("Jun 2020 – Present")']:[]),
+        ...(reordered?['Name and contact details now come first in the text an ATS reads, in the same design']:[]),
+        ...notes];
+      state._fixMode='format';
+      state._fixBefore=state.atsOriginal!=null?state.atsOriginal:(state.ats&&state.ats.score);
+      renderFixScore(doc);
+      doc.body.addEventListener('input',()=>{clearTimeout(state._fixTimer);state._fixTimer=setTimeout(()=>renderFixScore(doc),400);});
+      $('resumeFormatNote').textContent=changed.length
+        ?`${changed.length} paragraph${changed.length===1?'':'s'} rewritten in your resume's own layout and fonts. Highlighting is not printed; the score updates as you edit.`
+        :'The AI did not change any paragraph this time. Press Rewrite again, or edit the page yourself.';
+    }else{
+      const d=await callJSON(buildResumeFixPrompt());
+      state._resumeFixChanges=d.changes||[];
+      $('resumePreview').style.display='none';
+      $('resumeTextField').style.display='block';
+      $('resumeEditText').value=(d.resume||'').trim()||state.resumeText;
+      state._fixMode='text';
+    }
     renderResumeChanges();
   }catch(err){
     toast('Could not rewrite the resume: '+(err.message||err));
@@ -1930,27 +2665,61 @@ async function runResumeFix(){
 }
 function renderResumeChanges(){
   const list=state._resumeFixChanges||[];
-  document.getElementById('resumeChanges').innerHTML=list.length
+  $('resumeChanges').innerHTML=list.length
     ?'<div class="infobox"><b>What changed:</b><ul style="margin:6px 0 0 18px">'+list.map(c=>`<li>${esc(c)}</li>`).join('')+'</ul></div>'
     :'';
 }
 function setResumeFixLoading(on){
-  document.getElementById('resumeFixLoading').style.display=on?'block':'none';
-  document.getElementById('resumeFixFields').style.display=on?'none':'block';
+  $('resumeFixLoading').style.display=on?'block':'none';
+  $('resumeFixFields').style.display=on?'none':'block';
 }
-function confirmResumeFix(){
-  const text=document.getElementById('resumeEditText').value.trim();
-  if(text.length<80){toast('The resume text looks too short');return;}
+function resumeFileName(){
+  const base=state.candidateName?state.candidateName.replace(/[^\w -]/g,'').trim().replace(/\s+/g,'_'):'Resume';
+  return base+'_Updated.pdf';
+}
+function useFixedResume(base64,text,note){
+  const fname=resumeFileName();
   state.resumeText=text;
-  const base64=buildResumePDF(text,state.candidateName);
-  const fname=(state.candidateName?state.candidateName.replace(/[^\w -]/g,'').trim().replace(/\s+/g,'_'):'Resume')+'_Updated.pdf';
   state.resumeFile={name:fname,type:'application/pdf',data:base64};
   downloadBase64(base64,fname,'application/pdf');
-  document.getElementById('fname').textContent=fname;
-  document.getElementById('fchars').textContent=text.length.toLocaleString()+' characters · AI-improved resume';
-  document.getElementById('resumeDownloadBtn').style.display='inline-block';
+  $('fname').textContent=fname;
+  $('fchars').textContent=text.length.toLocaleString()+' characters · AI-improved resume';
+  $('resumeDownloadBtn').style.display='inline-block';
   closeModal('resumeModal');
-  toast('Updated resume downloaded — it will be used for new application emails ✓');
+  toast(note||'Updated resume downloaded — it will be used for new application emails ✓');
+}
+async function confirmResumeFix(){
+  if(state._fixMode!=='format'){
+    const text=$('resumeEditText').value.trim();
+    if(text.length<80){toast('The resume text looks too short');return;}
+    useFixedResume(buildResumePDF(text,state.candidateName),text);
+    return;
+  }
+  const f=$('resumePreview'), doc=f.contentDocument;
+  const text=ResumeFormat.plainText(doc).trim();
+  if(text.length<80){toast('The resume text looks too short');return;}
+  const html=ResumeFormat.exportHTML(doc);
+  const btn=$('resumeConfirm'); btn.disabled=true; btn.textContent='Making PDF…';
+  // From now on the fixed version is the resume: scored, searched with and sent.
+  const adopt=()=>{state.resumeDoc=html;state.resumeRaw=text;state.atsBlocks=ResumeFormat.blocks(doc);};
+  try{
+    const r=await post('/api/resume-pdf',{html});
+    adopt();
+    useFixedResume(r.pdf,text);
+    refreshAts();
+  }catch(err){
+    /* No browser engine to print with (a hosted copy, or none installed): the
+       browser's own print dialog saves the same formatted page as a PDF, and the
+       simple text PDF is kept for attaching to emails. */
+    adopt();
+    toast('Choose "Save as PDF" in the print dialog to keep your format.');
+    try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(_){}
+    useFixedResume(buildResumePDF(text,state.candidateName),text,
+      'A formatted PDF could not be made here ('+(err.message||err)+'). Use the print dialog to save it; a plain PDF was downloaded for emails.');
+    refreshAts();
+  }finally{
+    btn.disabled=false; btn.textContent='✓ Reviewed — download PDF & use';
+  }
 }
 // Simple, ATS-friendly PDF: CAPS lines rendered as bold section headers, everything else as body text.
 function buildResumePDF(text,name){

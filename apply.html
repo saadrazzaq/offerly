@@ -133,8 +133,11 @@
 
   .modal{position:fixed;inset:0;background:rgba(4,6,12,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;overflow:auto}
   .modal.show{display:flex}
-  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:560px;width:100%;padding:26px;box-shadow:var(--shadow)}
-  .mbox h3{font-size:20px;margin-bottom:6px}
+  .mbox{background:var(--bg2);border:1px solid var(--line);border-radius:18px;max-width:560px;width:100%;padding:26px;box-shadow:var(--shadow);position:relative}
+  .mclose{position:absolute;top:14px;right:14px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:9px;color:var(--mut);font-size:22px;line-height:1;cursor:pointer;padding:0}
+  .mclose:hover{color:var(--text);background:rgba(255,255,255,.06);border-color:var(--line)}
+  .mclose:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .mbox h3{font-size:20px;margin-bottom:6px;padding-right:40px}
   .mbox .note a{color:#fff}
   .check{display:flex;gap:9px;align-items:center;font-size:14px;color:var(--mut);margin-bottom:16px}
   .mrow{display:flex;gap:10px;margin-top:6px}
@@ -690,6 +693,15 @@ function saveSettings(){
 }
 function closeModal(id){$(id).classList.remove('show');}
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+// Every popup gets a × in its corner, as well as closing on Esc or a click outside.
+document.querySelectorAll('.modal').forEach(m=>{
+  const box=m.querySelector('.mbox');
+  if(!box||box.querySelector('.mclose'))return;
+  const b=document.createElement('button');
+  b.type='button';b.className='mclose';b.setAttribute('aria-label','Close');b.title='Close';b.textContent='×';
+  b.onclick=()=>m.classList.remove('show');
+  box.prepend(b);
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal.show').forEach(m=>m.classList.remove('show'));});
 
 /* ---------- bridge calls ---------- */

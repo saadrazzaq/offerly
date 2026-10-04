@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const engines = require('./engines');
 const jobfeeds = require('./jobfeeds');
+const pdfrender = require('./pdfrender');
 
 let VERSION = '';
 try { VERSION = require('./package.json').version; } catch (_) {}
@@ -221,11 +222,11 @@ function sendJSON(res, code, obj) {
 // The pages are the app: served with no-store so a reload always picks up the
 // current build. Without this a browser caches the HTML heuristically and an
 // update appears to have changed nothing.
-function servePage(res, file) {
+function servePage(res, file, type = 'text/html; charset=utf-8') {
   fs.readFile(path.join(HERE, file), (e, data) => {
     if (e) { res.writeHead(500); return res.end(file + ' not found'); }
     res.writeHead(200, {
-      'content-type': 'text/html; charset=utf-8',
+      'content-type': type,
       'cache-control': 'no-store, must-revalidate',
     });
     res.end(data);
@@ -240,7 +241,7 @@ function logResponse(model, prompt, text) {
 
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
-  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs',
+  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs', '/api/resume-pdf',
   // The AI endpoint runs prompts on your key or your signed-in Claude Code / Gemini /
   // Codex account. Left open, any website you happened to visit while the bridge was
   // running could spend it from your browser. A page hosted elsewhere that should
@@ -277,6 +278,8 @@ async function handle(req, res) {
 
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) return servePage(res, 'index.html');
   if (req.method === 'GET' && (url === '/apply' || url === '/apply.html')) return servePage(res, 'apply.html');
+  if (req.method === 'GET' && url === '/resumeformat.js') return servePage(res, 'resumeformat.js', 'text/javascript; charset=utf-8');
+  if (req.method === 'GET' && url === '/atsscore.js') return servePage(res, 'atsscore.js', 'text/javascript; charset=utf-8');
 
   // /health tells the page whether anything can run; /api/engines fills the picker.
   // Stored secrets are never included — a field only reports that one is set.
@@ -374,7 +377,11 @@ async function handle(req, res) {
       const b = await readJSON(req, 1e5);
       const out = await jobfeeds.search({
         roles: Array.isArray(b.roles) ? b.roles.slice(0, 12) : [],
-        companies: Array.isArray(b.companies) ? b.companies.slice(0, 20) : [],
+        // A name and, when the recruiter knew it, the company's website. Nothing else
+        // from the page: the boards read for a company are found by the server.
+        companies: Array.isArray(b.companies) ? b.companies.slice(0, 24).map(c => (c && typeof c === 'object'
+          ? { name: String(c.name || '').slice(0, 80), domain: String(c.domain || '').slice(0, 120) }
+          : String(c || '').slice(0, 80))) : [],
         country: String(b.country || ''),
         workSetup: ['remote', 'hybrid', 'onsite'].includes(b.workSetup) ? b.workSetup : '',
         days: Number.isFinite(+b.days) ? Math.max(0, Math.min(90, +b.days)) : 7,
@@ -385,6 +392,20 @@ async function handle(req, res) {
       });
       console.log('  live jobs: ' + out.jobs.length + ' kept from ' + out.scanned + ' scanned, rejected ' + JSON.stringify(out.rejected));
       return sendJSON(res, 200, out);
+    }
+
+    // The fixed resume, laid out in its original format by the page, printed by the
+    // local browser engine so the PDF keeps real text, fonts and clean page breaks.
+    if (req.method === 'POST' && url === '/api/resume-pdf') {
+      if (engines.SERVERLESS) return sendJSON(res, 501, { error: 'This copy cannot make PDFs; use Print → Save as PDF.' });
+      const b = await readJSON(req, 8e6);
+      if (!b || typeof b.html !== 'string' || !b.html.trim()) throw new Error('Nothing to print.');
+      try {
+        const pdf = await pdfrender.htmlToPdf(b.html);
+        return sendJSON(res, 200, { pdf: pdf.toString('base64') });
+      } catch (e) {
+        return sendJSON(res, e.status || 500, { error: e.message || String(e) });
+      }
     }
 
     if (req.method === 'POST' && url === '/api/fetch-url') {

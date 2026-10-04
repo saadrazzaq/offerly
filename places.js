@@ -236,6 +236,34 @@ function countryKey(country) {
   return String(country || '').toLowerCase().replace(/\s*\(.*\)$/, '').trim();
 }
 
+// A location can list alternatives ("Remote - EMEA / Remote - US", "London; Dubai",
+// "UK or Ireland") or narrow one place down ("EMEA, Portugal", "Riyadh, Saudi
+// Arabia"). Each alternative is resolved on its own, and within one, a country
+// narrows the region it sits in: "EMEA, Portugal" is Portugal, not all of EMEA.
+function resolveParts(text, extra = []) {
+  const parts = String(text || '').split(/\s*(?:\/|;|\||\n|\s+or\s+|\s+and\s+|\s+&\s+)\s*/i).filter(s => s.trim());
+  const out = parts.map(p => resolve(p));
+  for (const v of extra) if (String(v || '').trim()) out.push(resolve('', [v]));
+  return out.length ? out : [resolve('')];
+}
+function partOpenTo(part, key, remote) {
+  if (part.countries.size) return part.countries.has(key);
+  for (const r of part.regions) if ((REGION[r] || []).includes(key)) return true;
+  return part.anywhere && remote;
+}
+// Is a posting at this location open to someone looking in `country`? Some
+// alternative has to be: naming that country, or a region containing it with no
+// narrower country given, or "worldwide" for a remote role.
+function openTo(text, extra, country, remote) {
+  const key = countryKey(country);
+  return resolveParts(text, extra).some(p => partOpenTo(p, key, remote));
+}
+// "Remote (Global)": every alternative says anywhere and none narrows it.
+function openAnywhere(text, extra) {
+  const parts = resolveParts(text, extra);
+  return parts.some(p => p.anywhere) && parts.every(p => !p.countries.size && !p.regions.size);
+}
+
 // Is a posting at `place` open to someone looking in `country`?
 //   - it names that country, or
 //   - it names a region that contains it, or
@@ -255,4 +283,4 @@ function openWorldwide(place) {
   return place.anywhere && !place.countries.size && !place.regions.size;
 }
 
-module.exports = { resolve, placeMatches, openWorldwide, countryKey, COUNTRY, REGION };
+module.exports = { resolve, resolveParts, openTo, openAnywhere, placeMatches, openWorldwide, countryKey, COUNTRY, REGION };

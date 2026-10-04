@@ -20,3 +20,6 @@ offerly.mail.json
 
 # Engine settings — contains your API keys
 offerly.engines.json
+
+# Job boards found for each company, remembered between searches
+offerly.boards.json
