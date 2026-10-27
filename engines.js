@@ -109,11 +109,15 @@ const ENGINES = [
     },
     files: true,
     fields: [BIN_FIELD('CLAUDE_BIN', 'C:\\path\\to\\claude.exe')],
+    // Aliases, not versions: Claude Code maps each to the newest model of that family
+    // on your plan, so the list never goes stale. Connect asks which version each is.
     models: [
-      { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — balanced (recommended)' },
-      { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 — deepest analysis' },
-      { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — fastest' },
+      { value: 'opus', label: 'Claude Opus (latest on your plan) — deepest analysis' },
+      { value: 'sonnet', label: 'Claude Sonnet (latest on your plan) — balanced' },
+      { value: 'haiku', label: 'Claude Haiku (latest on your plan) — fastest' },
+      { value: 'fable', label: 'Claude Fable (latest on your plan)' },
     ],
+    discover: discoverClaudeCli,
     args: (model, opts) => {
       const a = ['-p', '--output-format', 'text'];
       if (model) a.push('--model', model);
@@ -251,6 +255,8 @@ const ENGINES = [
       { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini — cheaper' },
       { value: 'gpt-4.1', label: 'GPT-4.1' },
     ],
+    discover: cfg => listOpenAIModels('https://api.openai.com/v1', cfg.apiKey, 'the OpenAI API',
+      id => /^(gpt-|o\d|chatgpt-)/.test(id) && !/(audio|realtime|tts|transcribe|image|search|embedding|instruct)/.test(id)),
     call: (o) => chatCompletions({ ...o, baseUrl: 'https://api.openai.com/v1', key: o.cfg.apiKey }),
   },
   {
@@ -264,10 +270,12 @@ const ENGINES = [
     files: 'inline',
     fields: [KEY_FIELD('ANTHROPIC_API_KEY', 'sk-ant-…')],
     models: [
-      { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-      { value: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
-      { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+      { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+      { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+      { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+      { value: 'claude-fable-5-1', label: 'Claude Fable 5.1' },
     ],
+    discover: listAnthropicModels,
     call: anthropicMessages,
   },
   {
@@ -284,6 +292,7 @@ const ENGINES = [
       { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
       { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     ],
+    discover: listGeminiModels,
     call: geminiGenerate,
   },
   {
@@ -303,6 +312,7 @@ const ENGINES = [
         placeholder: 'anthropic/claude-sonnet-4.5' },
     ],
     models: [{ value: '', label: 'The model entered above' }],
+    discover: cfg => listOpenAIModels(cfg.baseUrl, cfg.apiKey, 'that endpoint'),
     call: (o) => chatCompletions({ ...o, model: o.model || o.cfg.model, baseUrl: o.cfg.baseUrl, key: o.cfg.apiKey }),
   },
 ];
@@ -331,6 +341,7 @@ function openAICompatible({ id, providerLabel, baseUrl, env, keyHint, modelHint,
     files: 'inline',
     fields,
     models: [{ value: '', label: 'The model entered above' }],
+    discover: cfg => listOpenAIModels(baseUrl || cfg.baseUrl, cfg.apiKey || 'none', providerLabel),
     call: o => chatCompletions({
       ...o, model: o.model || o.cfg.model,
       baseUrl: baseUrl || o.cfg.baseUrl, key: o.cfg.apiKey || 'none',
@@ -496,7 +507,12 @@ refresh();
 function describe(e) {
   const cfg = cfgOf(e);
   let models = e.models;
-  if (e.id === 'openai-compatible' && cfg.model) models = [{ value: cfg.model, label: cfg.model }];
+  const found = discovered(e);
+  if (found && found.length) {
+    // An engine whose model is a text field keeps that choice at the top of the list.
+    const typed = (e.fields || []).some(f => f.key === 'model') && cfg.model;
+    models = typed ? [{ value: '', label: `${cfg.model} (entered above)` }, ...found.filter(m => m.value !== cfg.model)] : found;
+  } else if (e.id === 'openai-compatible' && cfg.model) models = [{ value: cfg.model, label: cfg.model }];
   if (e.id === 'ollama' && cfg.model && !e.models.some(m => m.value === cfg.model)) {
     models = [{ value: cfg.model, label: cfg.model + ' (yours)' }, ...e.models];
   }
@@ -551,7 +567,8 @@ function pickModel(e, model, cfg) {
   // Every other engine that names its model in a text field takes it from there.
   if ((e.fields || []).some(f => f.key === 'model')) return want || cfg.model || '';
   if (e.models.some(m => m.value === want)) return want;
-  return e.models[0].value;
+  if ((discovered(e) || []).some(m => m.value === want)) return want;
+  return (discovered(e) || e.models)[0].value;
 }
 
 // An agent CLI that is installed but signed out fails with its own wording, and the
@@ -732,6 +749,89 @@ async function geminiGenerate({ cfg, model, prompt, images, timeout }) {
   return out.trim();
 }
 
+// --- model discovery --------------------------------------------------------
+// The lists above are only a starting point: Connect asks the engine itself which
+// models it has, so a newer model on your plan or key shows up without a code change.
+// "claude-opus-5-5" -> "Claude Opus 5.5"
+function prettyModel(id) {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)$/.exec(id);
+  return m ? `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}` : id;
+}
+async function getJSON(url, headers, label) {
+  let r;
+  try {
+    r = await fetch(url, { headers, signal: AbortSignal.timeout(TEST_TIMEOUT_MS) });
+  } catch (ex) {
+    throw new Error(`Could not reach ${label} (${ex.cause?.code || ex.name || ex.message}).`);
+  }
+  const json = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(`${label} returned HTTP ${r.status}: ${json?.error?.message || json?.message || ''}`.trim());
+  return json;
+}
+async function listAnthropicModels(cfg) {
+  const j = await getJSON('https://api.anthropic.com/v1/models?limit=100',
+    { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' }, 'the Anthropic API');
+  return (j?.data || []).map(m => ({ value: m.id, label: m.display_name || prettyModel(m.id) }));
+}
+async function listGeminiModels(cfg) {
+  const j = await getJSON('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+    { 'x-goog-api-key': cfg.apiKey }, 'the Gemini API');
+  return (j?.models || [])
+    .filter(m => /^models\/gemini/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => ({ value: m.name.replace(/^models\//, ''), label: m.displayName || m.name }));
+}
+async function listOpenAIModels(baseUrl, key, label, keep = () => true) {
+  if (!baseUrl) throw new Error('Enter the base URL first.');
+  const j = await getJSON(`${String(baseUrl).replace(/\/+$/, '')}/models`,
+    key ? { authorization: `Bearer ${key}` } : {}, label);
+  return (j?.data || []).map(m => m.id).filter(Boolean).filter(keep).sort()
+    .map(id => ({ value: id, label: id }));
+}
+// Claude Code has no "list models" command, but a reply in JSON names the exact model
+// that answered. One tiny prompt per alias shows which version each one is on this
+// plan; an alias the plan does not include fails and is left off the list.
+async function discoverClaudeCli(cfg, e, bin) {
+  const probe = alias => new Promise(resolve_ => {
+    const child = spawnAgent(bin, ['-p', '--output-format', 'json', '--model', alias], { cwd: os.tmpdir() });
+    let out = '';
+    const timer = setTimeout(() => { child.kill(); resolve_(null); }, TEST_TIMEOUT_MS);
+    child.stdout.on('data', d => out += d.toString('utf8'));
+    child.on('error', () => { clearTimeout(timer); resolve_(null); });
+    child.on('close', () => {
+      clearTimeout(timer);
+      try {
+        const j = JSON.parse(out);
+        if (j.is_error) return resolve_(null);
+        // Claude Code also runs a small helper model, so pick the one named after the alias.
+        const id = Object.keys(j.modelUsage || {}).find(k => k.includes(alias));
+        resolve_(id ? { value: alias, label: `${prettyModel(id)} (${alias}: newest on your plan)`, id } : null);
+      } catch (_) { resolve_(null); }
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end('Reply with OK');
+  });
+  const found = (await Promise.all(e.models.map(m => probe(m.value)))).filter(Boolean);
+  if (!found.length) throw new Error('Claude Code did not answer. Check that it is signed in.');
+  return found;
+}
+
+// Found lists, kept with the engine's other settings so they survive a restart.
+const MODEL_RE = /^[\w.:\/-]{1,160}$/;
+function discovered(e) {
+  const list = SAVED[e.id] && SAVED[e.id]._models;
+  return Array.isArray(list) ? list.filter(m => m && MODEL_RE.test(m.value)) : null;
+}
+async function discoverModels(engineId, override) {
+  const { e, cfg, bin } = getEngine(engineId, override);
+  if (!e.discover) return { models: e.models, discovered: false };
+  const models = (await e.discover(cfg, e, bin)).filter(m => MODEL_RE.test(m.value));
+  if (!models.length) throw new Error(`${e.label} did not list any models.`);
+  if (!SERVERLESS) {
+    try { writeSaved({ ...SAVED, [e.id]: { ...(SAVED[e.id] || {}), _models: models } }); } catch (_) {}
+  }
+  return { models, discovered: true };
+}
+
 // --- public entry point -----------------------------------------------------
 const IMG_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 
@@ -798,6 +898,6 @@ async function test(engineId, model, override) {
 
 module.exports = {
   SSO_ENABLED,
-  run, test, listEngines, describe, defaultEngine, refresh, getEngine,
+  run, test, discoverModels, listEngines, describe, defaultEngine, refresh, getEngine,
   saveConfig, forgetConfig, startLogin, authStatus, classifyFailure, BY_ID, CFG_FILE, SERVERLESS,
 };

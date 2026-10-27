@@ -23,3 +23,6 @@ offerly.engines.json
 
 # Job boards found for each company, remembered between searches
 offerly.boards.json
+
+# Phone pairing key: anyone holding it can use Offerly on your Wi-Fi
+offerly.lan.json

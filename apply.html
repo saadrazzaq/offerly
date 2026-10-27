@@ -318,7 +318,7 @@ let BRIDGE=SELF||LOCAL_BRIDGE;
 let REMOTE=false;   // true when this page has to reach a bridge on your machine
 let ENGINES=[];
 if(!SELF)document.querySelectorAll('nav.tabs a').forEach(a=>a.href=LOCAL_BRIDGE+a.getAttribute('href'));
-const MAX_SHOTS=5, CONCURRENCY=2;
+const MAX_SHOTS=5, MAX_EMAILS=5, CONCURRENCY=2;
 const state={resume:null,jobs:[],mail:{configured:false},focusId:null};
 let seq=0;
 const $=id=>document.getElementById(id);
@@ -537,9 +537,11 @@ async function connectEngine(){
       if(i>=0)ENGINES[i]=j.engineInfo;
     }
     setTested(id,true);
-    status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.';
+    status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.'
+      +(j.modelsFound?' Found '+j.modelsFound+' model'+(j.modelsFound>1?'s':'')+' — pick one under Model.':'')
+      +(j.modelsError?' Could not list its models: '+escapeHTMLish(j.modelsError):'');
     e.available=true;
-    toast('Connected to '+e.label);
+    toast('Connected to '+e.label+(j.modelsFound?' · '+j.modelsFound+' models found':''));
     checkBridge();
   }catch(err){
     setTested(id,false);
@@ -874,10 +876,11 @@ function renderInputs(){
     el.dataset.job=j.id;
     let body='';
     if(j.kind==='url')body=`<input type="url" class="main-input" placeholder="https://… job post link" value="${esc(j.value)}">`;
-    else if(j.kind==='text')body=`<textarea class="main-input" rows="5" placeholder="Paste the full job post, including any email address it mentions">${esc(j.value)}</textarea>`;
-    else body=`<div class="shot main-input" tabindex="0" role="button">🖼 Click, drop, or press Ctrl+V to add a screenshot of the job post (up to ${MAX_SHOTS})</div>
+    else if(j.kind==='text')body=`<textarea class="main-input" rows="5" placeholder="Paste the full job post, including any email address it mentions. Paste several posts here and each gets its own email (up to ${MAX_EMAILS})">${esc(j.value)}</textarea>`;
+    else body=`<div class="shot main-input" tabindex="0" role="button">🖼 Click, drop, or press Ctrl+V to add job post screenshots. Each screenshot becomes its own email (up to ${MAX_EMAILS})</div>
       <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-      <div class="thumbs">${j.images.map((im,i)=>`<div class="thumb"><img alt="Screenshot ${i+1}" src="data:${im.mediaType};base64,${im.data}"><button aria-label="Remove screenshot" data-rmimg="${i}">×</button></div>`).join('')}</div>`;
+      <div class="thumbs">${j.images.map((im,i)=>`<div class="thumb"><img alt="Screenshot ${i+1}" src="data:${im.mediaType};base64,${im.data}"><button aria-label="Remove screenshot" data-rmimg="${i}">×</button></div>`).join('')}</div>
+      ${j.images.length&&j.images.length<MAX_SHOTS?`<a href="#" class="addpage" style="font-size:12px">+ Add another screenshot of this same post</a><input type="file" class="pagefile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>`:''}`;
     el.innerHTML=`<div class="num">${idx+1}</div><div>
       <div class="top">
         <div class="seg" role="tablist">${[['url','Link'],['image','Screenshot'],['text','Text']].map(([k,l])=>`<button role="tab" aria-selected="${j.kind===k}" class="${j.kind===k?'on':''}" data-kind="${k}">${l}</button>`).join('')}</div>
@@ -916,21 +919,38 @@ function renderInputs(){
       main.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}};
       fi.onchange=()=>{addImages(j,[...fi.files]);};
       wireDrop(main,files=>addImages(j,files));
+      const pf=el.querySelector('.pagefile');
+      if(pf){
+        el.querySelector('.addpage').onclick=ev=>{ev.preventDefault();pf.click();};
+        pf.onchange=()=>{addImages(j,[...pf.files],true);};
+      }
       el.querySelectorAll('[data-rmimg]').forEach(b=>b.onclick=ev=>{ev.stopPropagation();j.images.splice(+b.dataset.rmimg,1);renderInputs();refreshGenBtn();});
     }
   });
   refreshGenBtn();
 }
 
-async function addImages(j,files){
+/* Each screenshot is its own job post, so it gets its own job and its own email.
+   samePost=true is the "another screenshot of this same post" link, which appends. */
+async function addImages(j,files,samePost){
   const imgs=files.filter(f=>/^image\/(png|jpe?g|webp|gif)$/.test(f.type));
   if(!imgs.length){toast('Use PNG, JPG, WEBP or GIF screenshots');return;}
+  let target=j,added=0;
   for(const f of imgs){
-    if(j.images.length>=MAX_SHOTS){toast(`Up to ${MAX_SHOTS} screenshots per job`);break;}
     if(f.size>8*1024*1024){toast(f.name+' is over 8 MB — crop it and try again');continue;}
-    j.images.push({mediaType:f.type==='image/jpg'?'image/jpeg':f.type,data:await fileToBase64(f)});
+    const im={mediaType:f.type==='image/jpg'?'image/jpeg':f.type,data:await fileToBase64(f)};
+    if(samePost){
+      if(target.images.length>=MAX_SHOTS){toast(`Up to ${MAX_SHOTS} screenshots per post`);break;}
+    }else if(target.images.length){
+      if(inputJobs().filter(hasInput).length>=MAX_EMAILS){toast(`Up to ${MAX_EMAILS} job posts at a time. Generate these first, then add more.`);break;}
+      target={id:++seq,kind:'image',value:'',images:[],to:'',status:'idle',draft:null,error:''};
+      state.jobs.splice(state.jobs.indexOf(j)+1+added,0,target);
+      added++;
+    }
+    target.images.push(im);
   }
-  state.focusId=j.id;
+  if(added)toast(`Added ${added+1} screenshots as separate job posts`);
+  state.focusId=target.id;
   renderInputs();refreshGenBtn();
 }
 
@@ -959,8 +979,21 @@ function refreshGenBtn(){
 /* ---------- generation ---------- */
 async function generateAll(){
   showErr('');
-  const todo=inputJobs().filter(hasInput);
+  const ready=inputJobs().filter(hasInput);
+  const todo=ready.slice(0,MAX_EMAILS);
   if(!todo.length||!state.resume)return;
+  /* Nothing written can be sent without a way to send it, so check before spending
+     any model requests rather than after. */
+  await loadMailState();
+  if(!state.mail.configured){
+    showErr('Set up email sending first (✉ Email setup). Nothing was generated, so no tokens were used.');
+    openMail();
+    return;
+  }
+  if(ready.length>todo.length)toast(`Writing the first ${MAX_EMAILS}. The rest stay in the list for the next batch.`);
+  /* One input can hold several posts (pasted text, a screenshot of a list). Each input
+     gets one email; whatever is left of the batch goes to the extra posts found. */
+  state.extraLeft=MAX_EMAILS-todo.length;
   for(const j of todo){
     if(j.kind==='url'&&!/^https?:\/\//i.test(j.value.trim()))j.value='https://'+j.value.trim();
     j.status='queued';j.error='';j.draft=null;
@@ -995,23 +1028,44 @@ async function generateOne(j){
         +(page.jsonLd?`STRUCTURED JOB DATA:\n${page.jsonLd}\n`:'')
         +(page.emails.length?`EMAIL ADDRESSES FOUND ON THE PAGE: ${page.emails.join(', ')}\n`:'EMAIL ADDRESSES FOUND ON THE PAGE: none\n')
         +`PAGE TEXT:\n${page.text}`;
+      if(!j.to.trim()&&!page.emails.length&&!hasEmail(page.text))throw new Error(NO_EMAIL_MSG);
     }else if(j.kind==='text'){
       source=j.value.trim().slice(0,20000);
+      if(!j.to.trim()&&!hasEmail(source))throw new Error(NO_EMAIL_MSG);
     }else{
       images=j.images;
       source=`The job post is in ${images.length>1?'these screenshot files':'this screenshot file'}. Open ${images.length>1?'each one':'it'} with the Read tool and read it carefully:\n{{IMAGES}}`;
     }
     j.stage='Writing the application…';renderDraft(j);
-    const d=await callJSON(buildPrompt(source),images);
-    const to=(j.to||d.recipientEmail||'').trim();
-    j.draft={
-      company:d.company||'',role:d.role||'',location:d.location||'',
-      to,subject:(d.subject||'').trim(),body:(d.body||'').trim(),
-      instructions:(d.applyInstructions||'').trim(),
-      emailFromPost:!!d.recipientEmail,
-    };
-    if(!j.draft.body)throw new Error('The model returned an empty letter. Try again.');
+    const max=j.only?1:1+Math.max(0,state.extraLeft||0);
+    const d=await callJSON(buildPrompt(source,max,j.only,!!j.to.trim()),images);
+    const items=(Array.isArray(d.emails)?d.emails:[d]).filter(Boolean);
+    const skipped=items.filter(p=>p.noEmail&&!String(p.body||'').trim()).length;
+    const posts=items.filter(p=>String(p.body||'').trim()).slice(0,max);
+    if(!posts.length)throw new Error(skipped?NO_EMAIL_MSG:'The model returned an empty letter. Try again.');
+    if(skipped)toast(`${skipped} post${skipped>1?'s':''} had no application email, so no email was written for ${skipped>1?'them':'it'}`);
+    if(!j.only)state.extraLeft=Math.max(0,(state.extraLeft||0)-(posts.length-1));
+    /* A "Send to" typed for this input wins for a single post; with several, each
+       post's own address comes first and the typed one fills in where there is none. */
+    const toDraft=(p,to)=>({
+      company:p.company||'',role:p.role||'',location:p.location||'',
+      to:(to||p.recipientEmail||j.to||'').trim(),subject:(p.subject||'').trim(),body:plainDashes(String(p.body).trim()),
+      instructions:(p.applyInstructions||'').trim(),
+      emailFromPost:!!p.recipientEmail,
+    });
+    j.draft=toDraft(posts[0],posts.length===1?j.to:'');
     j.status='ready';
+    if(posts.length>1){
+      const pin=p=>({role:p.role||'',company:p.company||''});
+      j.only=pin(posts[0]);
+      posts.slice(1).forEach((p,i)=>{
+        const s={id:++seq,kind:j.kind,value:j.value,images:j.images,to:'',status:'ready',
+          draft:toDraft(p,''),error:'',sourceUrl:j.sourceUrl,only:pin(p)};
+        state.jobs.splice(state.jobs.indexOf(j)+1+i,0,s);
+        renderDraft(s);
+      });
+      toast(`Found ${posts.length} job posts in one input, wrote an email for each`);
+    }
   }catch(err){
     j.status='error';j.error=err.message||String(err);
     document.querySelector(`[data-draft="${j.id}"]`)?.remove();
@@ -1022,27 +1076,54 @@ async function generateOne(j){
   updateProgress();
 }
 
+// Style rules that keep a generated letter from reading as AI-written.
+const HUMAN_VOICE=`  • Write like a person, not a template. Mix short sentences with longer ones. Contractions such as "I've" and "I'm" are fine.
+  • Never use an em dash or en dash (— or –) in the body. Use a comma, a full stop or "and" instead.
+  • Do not use these words or phrases: "I am writing to", "I am confident", "align", "precisely", "the exact", "rigour", "rigor", "solid command", "further strengthening", "leverage", "passionate", "excited", "thrilled", "proven track record", "dynamic", "fast-paced", "spearheaded", "robust", "seamless", "delivering", "testament", "I would welcome the opportunity", "contribute to your team", "valuable asset".
+  • Do not repeat the job ad back ("the frameworks your post highlights", "your requirements"). Just say what the candidate has done.
+  • At most two numbers in the whole letter. At most three tool names in a row.
+  • If the company's name is not known, say "your team" or name the role. Never describe the company vaguely ("your Saudi-based company").
+  • No closing sentence that sums up how well the candidate fits.`;
+// Models still slip dashes in; swap them for commas (and hyphens in number ranges).
+function plainDashes(s){
+  return s.replace(/(\d)\s*[—–]\s*(\d)/g,'$1-$2').replace(/\s*[—–]\s*/g,', ');
+}
 function signature(){
   return [$('cName').value.trim(),$('cPhone').value.trim(),$('cLinkedin').value.trim()].filter(Boolean).join('\n');
 }
-function buildPrompt(source){
+/* max: how many separate posts this input may produce. only: {role,company} when
+   rewriting one email out of an input that held several posts. */
+const NO_EMAIL_MSG='No application email on this post, so nothing was written and no tokens were used. Find the address (the company\'s careers page usually has it), put it in "Send to" and generate again.';
+const hasEmail=t=>/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(t||'')||/\w+\s*[\[(]\s*at\s*[\])]\s*\w+/i.test(t||'');
+/* hasTo: the candidate typed a recipient, so a post without one is still sendable. */
+function buildPrompt(source,max=1,only=null,hasTo=false){
   const sig=signature()||'(use the candidate name from the resume)';
   const notes=$('cNotes').value.trim();
   const name=$('cName').value.trim();
-  return `You are an expert career writer. Read the job post and write a formal job application email from the candidate, tailored to this exact post.
+  const which=only
+    ?`The input may show several job posts. Write the email ONLY for the post for "${only.role}"${only.company?` at "${only.company}"`:''}, and return exactly one item in "emails".`
+    :max>1
+      ?`The input may hold more than one job post (several posts in one screenshot, or several pasted one after another). Write a separate email for each distinct post, up to ${max}, each with its own subject and content written for that post alone. A single post spread over several screenshots is still one post. If there is only one post, return one item.`
+      :'Write one email, for the main job post in the input.';
+  return `Read the job post and write the job application email the candidate would write themselves: polite and professional, but in their own plain words, tailored to this exact post. A recruiter must not be able to tell it was written by AI.
 
+${which}
+${hasTo?'':`
+FIRST check each post for an email address to send the application to. If a post gives none, do NOT write anything for it: return its item as {"role":"…","company":"…","noEmail":true,"body":""} and move on. Writing a letter that cannot be sent wastes the candidate's time.
+`}
 Reply with ONLY this JSON object (no markdown, no commentary):
-{"company":"","role":"","location":"","recipientEmail":"","recipientName":"","applyInstructions":"","subject":"","body":""}
+{"emails":[{"company":"","role":"","location":"","recipientEmail":"","recipientName":"","applyInstructions":"","subject":"","body":""}]}
 
-Field rules:
+Field rules (for each item):
 - recipientEmail: the address the post says to send applications to. Copy it exactly. If the post does not clearly give an application email, use "". Never guess or construct an address. Ignore addresses that are clearly not for applications (privacy, support, noreply).
 - recipientName: the contact person's name if the post gives one, else "".
 - applyInstructions: special instructions from the post that the candidate must follow (required subject format, reference number, documents requested, deadline, questions to answer) in under 30 words, else "".
 - subject: if the post asks for a subject format, follow it exactly. Otherwise "Application for <Role> – ${name||'<Candidate Name>'}", adding the job reference number if the post has one.
-- body: plain text, formal and specific, 170–240 words.
+- body: plain text, specific, 120–170 words.
   • Greeting: "Dear <recipientName>," if known, otherwise "Dear Hiring Manager,".
-  • Opening names the exact role and company and where the post was seen if known.
-  • One or two paragraphs linking 2–3 concrete, quantified achievements from the resume to the post's main requirements.
+  • Opening names the exact role, the company if the post names it, and where the post was seen if known. Start with something like "I'd like to apply for…", never "I am writing to apply".
+  • One or two short paragraphs on the one or two things from the resume that matter most for this post. Say what the candidate did, plainly.
+${HUMAN_VOICE}
   • If the post asks for things like availability, notice period, visa status or expected salary, answer only with facts from the resume or the candidate notes. If a fact is unknown, leave it out. Never invent.
   • Say the resume is attached.
   • Close with a short line inviting an interview, a blank line, "Best regards,", then exactly this signature on its own lines:

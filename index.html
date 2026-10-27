@@ -445,6 +445,7 @@
       <div class="skeleton" style="width:85%"></div>
       <div class="skeleton" style="width:70%"></div>
     </div>
+    <div id="draftNeeds" style="display:none"></div>
     <div id="draftFields" style="display:none">
       <div id="draftWarn"></div>
       <div class="row2">
@@ -736,9 +737,11 @@ async function connectEngine(){
       if(i>=0)ENGINES[i]=j.engineInfo;
     }
     setTested(id,true);
-    status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.';
+    status.innerHTML='🟢 Connected — '+e.label+' replied in '+(j.ms/1000).toFixed(1)+'s.'
+      +(j.modelsFound?' Found '+j.modelsFound+' model'+(j.modelsFound>1?'s':'')+' — pick one under Model.':'')
+      +(j.modelsError?' Could not list its models: '+escapeHTMLish(j.modelsError):'');
     e.available=true;
-    toast('Connected to '+e.label);
+    toast('Connected to '+e.label+(j.modelsFound?' · '+j.modelsFound+' models found':''));
     checkBridge();
   }catch(err){
     setTested(id,false);
@@ -1936,13 +1939,19 @@ function curCountry(){return state.filters.country||state.country||'';}
 function isGlobal(){return /^remote/i.test(curCountry());}
 function searchPlace(){return isGlobal()?'worldwide':curCountry();}
 function liPlace(){return isGlobal()?'Worldwide':curCountry();}
+/* Signed in, LinkedIn ignores a typed location and reuses your last search (often
+   "United States"); only its own geoId pins the country. Each id was checked against
+   LinkedIn's public results, so a country not listed keeps the typed name alone
+   rather than risk sending the search somewhere else. */
+const LI_GEO={'Saudi Arabia':100459316,'United Arab Emirates':104305776,'Qatar':104170880,'Kuwait':103239229,'Bahrain':100425729,'Oman':103619019,'Pakistan':101022442,'India':102713980,'Egypt':106155005,'United States':103644278,'United Kingdom':101165590,'Canada':101174742,'Germany':101282230,'Netherlands':102890719,'Ireland':104738515,'France':105015875,'Sweden':105117694,'Spain':105646813,'Poland':105072130,'Singapore':102454443,'Australia':101452733,'New Zealand':105490917,'Japan':101355337,'Malaysia':106808692,'Italy':103350119,'Worldwide':92000000};
+function liGeo(){const g=LI_GEO[liPlace()];return g?'&geoId='+g:'';}
 /* Only a web link may become an href: a feed could hand us javascript: or data:. */
 function safeURL(u){try{const x=new URL(String(u||''));return /^https?:$/.test(x.protocol)?x.href:'#';}catch{return '#';}}
 function applyURL(j){return `https://www.google.com/search?q=${enc((j.company||'')+' '+(j.role||'')+' '+searchPlace()+wsWord()+' careers apply job')}`+googleFilter();}
-function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}`+liFilter();}
+function linkedinURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}${liGeo()}`+liFilter();}
 // LinkedIn jobs search pre-filtered to Easy Apply roles (f_AL=true), plus the
 // date-posted and workplace filters chosen on the page.
-function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}&f_AL=true`+liFilter();}
+function linkedinEasyApplyURL(j){return `https://www.linkedin.com/jobs/search/?keywords=${enc((j.role||'')+' '+(j.company||''))}&location=${enc(liPlace())}${liGeo()}&f_AL=true`+liFilter();}
 // A careers page lives at a different path on every site, and guessing /careers
 // 404s for many of them. Search the company's own domain instead.
 function careerDomainOf(j){return String(j.careerDomain||'').replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim().toLowerCase();}
@@ -1975,7 +1984,7 @@ const GULF_SLUG={'Saudi Arabia':'saudi-arabia','United Arab Emirates':'uae','Qat
 const SEEK_HOST={'Australia':'www.seek.com.au','New Zealand':'www.seek.co.nz','Hong Kong':'hk.jobsdb.com','Malaysia':'my.jobstreet.com','Singapore':'sg.jobstreet.com'};
 const DAYS_OK=(list,d)=>list.includes(d)?d:0;
 const JOB_SITES={
-  linkedin:{label:'LinkedIn',url:q=>`https://www.linkedin.com/jobs/search/?keywords=${enc(q)}&location=${enc(liPlace())}`+liFilter()},
+  linkedin:{label:'LinkedIn',url:q=>`https://www.linkedin.com/jobs/search/?keywords=${enc(q)}&location=${enc(liPlace())}${liGeo()}`+liFilter()},
   indeed:{label:'Indeed',url:q=>{
     if(isGlobal())return `https://www.indeed.com/jobs?q=${enc(q)}&l=Remote`+indeedFilter();
     const host=INDEED_HOST[curCountry()];
@@ -1990,6 +1999,10 @@ const JOB_SITES={
   naukrigulf:{label:'NaukriGulf',url:q=>GULF_SLUG[curCountry()]?`https://www.naukrigulf.com/${slugOf(q)}-jobs-in-${GULF_SLUG[curCountry()]}`:siteQ('naukrigulf.com',q,searchPlace())},
   jadarat:{label:'Jadarat',note:'Saudi national jobs portal',url:q=>siteQ('jadarat.sa',q,'')},
   tanqeeb:{label:'Tanqeeb',url:q=>siteQ('tanqeeb.com',q,searchPlace())},
+  // Same search engine as Rozee.pk; every result is in Saudi Arabia.
+  mihnati:{label:'Mihnati',url:q=>`https://www.mihnati.com/job/jsearch/q/${enc(q)}`},
+  // Monster Gulf is now foundit Gulf; monstergulf.com redirects there.
+  monstergulf:{label:'Monster Gulf',note:'now foundit',url:q=>`https://www.founditgulf.com/srp/results?query=${enc(q)}&locations=${enc(curCountry())}`},
   dubizzle:{label:'Dubizzle Jobs',url:q=>siteQ('dubizzle.com',q,'jobs')},
   rozee:{label:'Rozee.pk',url:q=>`https://www.rozee.pk/job/jsearch/q/${slugOf(q)}`},
   mustakbil:{label:'Mustakbil',url:q=>`https://www.mustakbil.com/jobs/search?keywords=${enc(q)}`},
@@ -2003,7 +2016,10 @@ const JOB_SITES={
   xing:{label:'XING',url:q=>`https://www.xing.com/jobs/search?keywords=${enc(q)}`},
   seek:{label:c=>/hong kong/i.test(c)?'JobsDB':/malaysia|singapore/i.test(c)?'Jobstreet':'SEEK',url:q=>{const h=SEEK_HOST[curCountry()];const d=state.filters.days;return h?`https://${h}/${slugOf(q)}-jobs`+(d?`?daterange=${Math.min(d,31)}`:''):siteQ('seek.com.au',q,'');}},
   mycareersfuture:{label:'MyCareersFuture',url:q=>`https://www.mycareersfuture.gov.sg/search?search=${enc(q)}`},
-  ziprecruiter:{label:'ZipRecruiter',url:q=>`https://www.ziprecruiter.com/jobs-search?search=${enc(q)}&location=${enc(isGlobal()?'Remote':'United States')}`+(state.filters.days?`&days=${state.filters.days}`:'')},
+  // Its own search only covers the US; elsewhere, search what it lists for that country.
+  ziprecruiter:{label:'ZipRecruiter',url:q=>isGlobal()||curCountry()==='United States'
+    ?`https://www.ziprecruiter.com/jobs-search?search=${enc(q)}&location=${enc(isGlobal()?'Remote':'United States')}`+(state.filters.days?`&days=${state.filters.days}`:'')
+    :siteQ('ziprecruiter.com',q,searchPlace())},
   dice:{label:'Dice',url:q=>{const d=state.filters.days;return `https://www.dice.com/jobs?q=${enc(q)}`+(d?'&filters.postedDate='+(d<=1?'ONE':d<=3?'THREE':d<=7?'SEVEN':'THIRTY'):'');}},
   monster:{label:'Monster',url:q=>`https://www.monster.com/jobs/search?q=${enc(q)}`},
   jobbank:{label:'Job Bank',url:q=>`https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=${enc(q)}`},
@@ -2020,9 +2036,9 @@ const JOB_SITES={
   daijob:{label:'Daijob',url:q=>`https://www.daijob.com/en/jobs/search_result?keywords=${enc(q)}`},
 };
 const SITES_FOR={
-  'Saudi Arabia':['bayt','gulftalent','naukrigulf','jadarat','tanqeeb'],
-  'United Arab Emirates':['bayt','gulftalent','naukrigulf','dubizzle'],
-  'Qatar':['bayt','gulftalent','naukrigulf'],
+  'Saudi Arabia':['bayt','gulftalent','naukrigulf','mihnati','tanqeeb','monstergulf','jadarat','wellfound','ziprecruiter'],
+  'United Arab Emirates':['bayt','gulftalent','naukrigulf','monstergulf','dubizzle'],
+  'Qatar':['bayt','gulftalent','naukrigulf','monstergulf'],
   'Pakistan':['rozee','mustakbil','brightspyre','bayt'],
   'India':['naukri','foundit'],
   'United Kingdom':['totaljobs','reed','cvlibrary'],
@@ -2095,11 +2111,22 @@ function buildSignature(){
   if(c.email)lines.push('✉️ '+c.email);
   return (c.name?c.name+'\n':'')+lines.join('\n');
 }
+// Style rules that keep a generated letter from reading as AI-written.
+const HUMAN_VOICE=`  • Write like a person, not a template. Mix short sentences with longer ones. Contractions such as "I've" and "I'm" are fine.
+  • Never use an em dash or en dash (— or –) in the body. Use a comma, a full stop or "and" instead.
+  • Do not use these words or phrases: "I am writing to", "I am confident", "align", "precisely", "the exact", "rigour", "rigor", "solid command", "further strengthening", "leverage", "passionate", "excited", "thrilled", "proven track record", "dynamic", "fast-paced", "spearheaded", "robust", "seamless", "delivering", "testament", "I would welcome the opportunity", "contribute to your team", "valuable asset".
+  • Do not repeat the job ad back ("the frameworks your post highlights", "your requirements"). Just say what the candidate has done.
+  • At most two numbers in the whole letter. At most three tool names in a row.
+  • No closing sentence that sums up how well the candidate fits.`;
+// Models still slip dashes in; swap them for commas (and hyphens in number ranges).
+function plainDashes(s){
+  return s.replace(/(\d)\s*[—–]\s*(\d)/g,'$1-$2').replace(/\s*[—–]\s*/g,', ');
+}
 function buildEmailPrompt(j){
   const sig=buildSignature();
   const sen=state.seniority&&state.seniority!=='auto'?`\nTARGET CAREER STAGE: ${state.seniority}`:'';
   const name=state.candidateName||'';
-  return `Write a tailored job-application email that is SPECIFIC to this exact position — not a generic template. Mirror the role's likely priorities and map the candidate's most relevant, quantified achievements to it.
+  return `Write the job-application email the candidate would write themselves for this exact position: polite and professional, but in their own plain words, not a generic template. A recruiter must not be able to tell it was written by AI.
 
 ROLE: ${j.role}
 COMPANY: ${j.company} (${j.companyType||''}) — ${j.location||''}
@@ -2110,10 +2137,11 @@ Reply with ONLY this JSON object (no markdown, no commentary): {"subject":"","bo
 
 Field rules:
 - subject: "Application for ${j.role} – ${name||'<Candidate Name>'}".
-- body: plain text only (use \\n for line breaks in the JSON string), 150-210 words, confident and specific.
+- body: plain text only (use \\n for line breaks in the JSON string), 120-170 words, specific.
   • Begin with "Dear Hiring Team," (recruiter name unknown).
-  • First line must name the exact role and company and hook into what they do.
-  • One paragraph mapping 2-3 concrete achievements (with real numbers from the resume) to this role's needs.
+  • First line names the exact role and company. Start with something like "I'd like to apply for…", never "I am writing to apply".
+  • One short paragraph on the one or two things from the resume that matter most for this role. Say what the candidate did, plainly.
+${HUMAN_VOICE}
   • One short line noting the resume is attached.
   • End with a brief call to action, then a blank line, then the sign-off "Best regards," followed by EXACTLY this signature block on its own lines — do not alter it, do not invent any other contact details:
 ${sig||'(candidate name)'}
@@ -2124,7 +2152,7 @@ Resume:
 }
 async function generateEmailDraft(j){
   const d=await callJSON(buildEmailPrompt(j));
-  let body=(d.body||'').trim();
+  let body=plainDashes((d.body||'').trim());
   const sig=buildSignature();
   // Safety net: guarantee phone/LinkedIn are present even if the model trimmed them.
   if(sig){ const need=[state.contact.phone,state.contact.linkedin].filter(Boolean); if(need.some(x=>!body.includes(x))){ body=body.replace(/\s*$/,'')+'\n\n'+sig; } }
@@ -2132,6 +2160,50 @@ async function generateEmailDraft(j){
     to:(j.applyEmail||'').trim(),
     subject:(d.subject||`Application for ${j.role} – ${state.candidateName||''}`).trim(),
     body,
+  };
+}
+
+/* Addresses on a careers page that are clearly for applications, versus the rest
+   (privacy, support, press) that the page also happens to show. */
+const APPLY_INBOX=/^(careers?|jobs?|hr|recruit\w*|talent\w*|hiring|cv|resumes?|apply|applications?|people|work)[._-]?\w*@/i;
+const NOT_INBOX=/^(no-?reply|do-?not-?reply|privacy|dpo|gdpr|legal|security|abuse|press|media|pr|webmaster|support|help|billing|sales|marketing)\b/i;
+/* null = ready to write; otherwise what is missing. Costs no model request: the only
+   network call is opening the posting itself to look for an address on it. */
+async function draftPrereqs(j){
+  const need={mail:!state.mail.configured,email:false,suggest:[]};
+  if(!(j.applyEmail&&EMAIL_RE.test(j.applyEmail.trim()))&&j._url){
+    try{
+      const page=await post('/api/fetch-url',{url:j._url});
+      const found=(page.emails||[]).filter(e=>EMAIL_RE.test(e)&&!NOT_INBOX.test(e));
+      const inbox=found.find(e=>APPLY_INBOX.test(e));
+      if(inbox)j.applyEmail=inbox; else need.suggest=found;
+    }catch(_){/* page would not open: ask for the address instead */}
+  }
+  need.email=!(j.applyEmail&&EMAIL_RE.test(j.applyEmail.trim()));
+  return need.mail||need.email?need:null;
+}
+function showDraftNeeds(i,need){
+  const j=state.jobs[i],box=$('draftNeeds');
+  const rows=[];
+  if(need.mail)rows.push(`<p>✉ Email sending isn't set up. <button class="ghost" onclick="openMail()">Set up</button></p>`);
+  if(need.email)rows.push(`<p>📭 This posting doesn't list an application email, so nothing has been written yet.
+      ${j._url?`Check <a href="${esc(safeURL(j._url))}" target="_blank" rel="noopener">the posting ↗</a> or the company's careers page, then enter`:'Enter'} the address to send to:</p>
+    <input type="text" id="needTo" placeholder="careers@company.com" autocomplete="off">
+    ${need.suggest.length?`<p class="note">Found on the posting (not clearly for applications): ${need.suggest.map(e=>`<a href="#" data-sug="${esc(e)}">${esc(e)}</a>`).join(', ')}</p>`:''}`);
+  box.innerHTML=`<div class="warnbox">${rows.join('')}</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+      <button class="ghost" onclick="closeModal('draftModal')">Cancel</button>
+      <button class="cta inline" id="needGo">Write the email</button>
+    </div>`;
+  box.style.display='block';
+  box.querySelectorAll('[data-sug]').forEach(a=>a.onclick=ev=>{ev.preventDefault();$('needTo').value=a.dataset.sug;});
+  $('needGo').onclick=async()=>{
+    const to=$('needTo')?$('needTo').value.trim():'';
+    if(need.email&&!EMAIL_RE.test(to)){toast('Enter a valid email address first');$('needTo').focus();return;}
+    if(to)j.applyEmail=to;
+    await loadMailState();renderDraftMailState();
+    if(!state.mail.configured){toast('Set up email sending first');openMail();return;}
+    openEmailDraft(i);
   };
 }
 
@@ -2145,8 +2217,14 @@ async function openEmailDraft(i){
   $('draftModal').classList.add('show');
   await loadMailState();
   renderDraftMailState();
+  $('draftNeeds').style.display='none';
   if(state.drafts[i]){ setDraftLoading(false); fillDraftFields(state.drafts[i]); return; }
+  /* Check everything sending needs before spending a model request: a letter with
+     nowhere to go, or no way to send it, is tokens spent for nothing. */
   setDraftLoading(true);
+  const need=await draftPrereqs(j);
+  if(draftIdx!==i)return;            // closed or switched while the posting loaded
+  if(need){ setDraftLoading(false); $('draftFields').style.display='none'; showDraftNeeds(i,need); return; }
   try{
     const d=await generateEmailDraft(j);
     state.drafts[i]=d;

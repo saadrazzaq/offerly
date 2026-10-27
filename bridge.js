@@ -3,7 +3,7 @@
 // Ollama) or an API key. The routes themselves live in app.js, which the Vercel
 // deployment in api/ reuses unchanged.
 const http = require('http');
-const { handle, PORT, engines, loadMailCfg, publicMailCfg } = require('./app');
+const { handle, PORT, LAN, lanUrls, engines, loadMailCfg, publicMailCfg } = require('./app');
 
 const server = http.createServer(handle);
 // A second copy cannot take the port, and the first one keeps answering with
@@ -18,7 +18,9 @@ server.on('error', err => {
   }
   throw err;
 });
-server.listen(PORT, '127.0.0.1', () => {
+// Only this computer can connect, unless phone access is on (OFFERLY_LAN=1), which
+// also lets devices on your Wi-Fi in — each one only after pairing with the key.
+server.listen(PORT, LAN ? '0.0.0.0' : '127.0.0.1', () => {
   const ready = engines.listEngines().filter(e => e.available);
   const def = engines.defaultEngine();
   console.log('\n  Offerly bridge running');
@@ -32,5 +34,11 @@ server.listen(PORT, '127.0.0.1', () => {
     console.log('                 paste its API key — or set OPENAI_API_KEY / ANTHROPIC_API_KEY /');
     console.log('                 GEMINI_API_KEY here before starting.');
   }
-  console.log('  → email        ' + (publicMailCfg(loadMailCfg()).configured ? 'ready (' + loadMailCfg().user + ')' : 'not set up yet') + '\n');
+  console.log('  → email        ' + (publicMailCfg(loadMailCfg()).configured ? 'ready (' + loadMailCfg().user + ')' : 'not set up yet'));
+  if (LAN) {
+    console.log('  → phone        scan the QR code at http://localhost:' + PORT + '/phone');
+    lanUrls().forEach(u => console.log('                 ' + u));
+    console.log('                 (same Wi-Fi only; the link holds a secret key, keep it to yourself)');
+  }
+  console.log('');
 });

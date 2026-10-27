@@ -5,7 +5,9 @@
 // reachable: locally that is an agent CLI billed to your own subscription, on Vercel
 // it is whichever API key is set in the project's environment variables.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const engines = require('./engines');
 const jobfeeds = require('./jobfeeds');
 const pdfrender = require('./pdfrender');
@@ -33,6 +35,71 @@ function sameOrigin(req) {
 }
 // Requests with no Origin come from local tools (curl etc.), not from websites.
 const trustedOrigin = req => !req.headers.origin || ALLOWED_ORIGINS.has(req.headers.origin) || sameOrigin(req);
+
+// --- phone access -----------------------------------------------------------
+// OFFERLY_LAN=1 (start-mobile.cmd) lets a phone on the same Wi-Fi open this bridge, so
+// it runs on the agents signed in on this computer. Anything not from this computer
+// must show a secret key once: the pairing link carries it and it is then kept as a
+// cookie. Without it, anyone on the network could spend your Claude account and send
+// email as you. The key is kept in offerly.lan.json (gitignored) so a paired phone
+// stays paired across restarts; delete that file to unpair every phone.
+const LAN = !HOSTED && process.env.OFFERLY_LAN === '1';
+const LAN_FILE = path.join(HERE, 'offerly.lan.json');
+let LAN_KEY = '';
+if (LAN) {
+  try { LAN_KEY = JSON.parse(fs.readFileSync(LAN_FILE, 'utf8')).key || ''; } catch (_) {}
+  if (!/^[a-f0-9]{24,}$/.test(LAN_KEY)) {
+    LAN_KEY = crypto.randomBytes(12).toString('hex');
+    fs.writeFileSync(LAN_FILE, JSON.stringify({ key: LAN_KEY }), { mode: 0o600 });
+  }
+}
+function lanUrls() {
+  if (!LAN) return [];
+  return Object.values(os.networkInterfaces()).flat()
+    .filter(a => a && a.family === 'IPv4' && !a.internal)
+    .map(a => `http://${a.address}:${PORT}/?key=${LAN_KEY}`);
+}
+const isLoopback = req => /^(127\.|::1$|::ffff:127\.)/.test(req.socket.remoteAddress || '');
+const sameKey = k => typeof k === 'string' && k.length === LAN_KEY.length
+  && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(LAN_KEY));
+// Returns true when the request was answered here (paired, or turned away).
+function lanGate(req, res, url) {
+  if (!LAN || isLoopback(req)) return false;
+  const q = new URLSearchParams((req.url || '').split('?')[1] || '').get('key');
+  if (q && sameKey(q)) {
+    res.writeHead(302, {
+      'set-cookie': `offerly_lan=${LAN_KEY}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict`,
+      location: url || '/',
+    });
+    res.end();
+    return true;
+  }
+  const c = /(?:^|;\s*)offerly_lan=([a-f0-9]+)/.exec(req.headers.cookie || '');
+  if (c && sameKey(c[1])) return false;
+  res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
+  res.end('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offerly</title>'
+    + '<body style="font:16px system-ui;padding:24px;max-width:480px;margin:auto">'
+    + '<h2>Pair this phone first</h2><p>On your computer, open <b>http://localhost:' + PORT + '/phone</b> '
+    + 'and scan the QR code with this phone, or open the link printed in the Offerly window.</p></body>');
+  return true;
+}
+// The pairing page: only ever shown on this computer, since it holds the key.
+function phonePage() {
+  const urls = lanUrls();
+  const body = !LAN
+    ? '<p>Phone access is off. Close Offerly and start it with <b>start-mobile.cmd</b> instead of start.cmd.</p>'
+    : !urls.length
+      ? '<p>This computer has no network address right now. Connect it to Wi-Fi and reload.</p>'
+      : '<p>Scan this with your phone camera. The phone must be on the same Wi-Fi as this computer, and this computer must stay on with Offerly running.</p>'
+        + urls.map((u, i) => `<div class="qr" id="qr${i}"></div><p><code>${u}</code></p>`).join('')
+        + '<p style="color:#888">The link holds a secret key, so share it with no one. Delete offerly.lan.json and restart to unpair every phone.</p>'
+        + '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>'
+        + `<script>${JSON.stringify(urls)}.forEach((u,i)=>new QRCode(document.getElementById('qr'+i),{text:u,width:220,height:220}));</script>`;
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offerly on your phone</title>'
+    + '<style>body{font:16px system-ui;padding:24px;max-width:560px;margin:auto;background:#fff;color:#111}'
+    + '.qr{background:#fff;padding:12px;display:inline-block;margin-top:8px}code{word-break:break-all}</style>'
+    + '<h2>Open Offerly on your phone</h2>' + body;
+}
 
 // --- AI engines -------------------------------------------------------------
 // Everything about *which* agent runs the prompt lives in engines.js.
@@ -241,7 +308,7 @@ function logResponse(model, prompt, text) {
 
 // Sensitive routes: only callable from your own Offerly pages.
 const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-config', '/api/mail-test',
-  '/api/engine-config', '/api/engine-connect', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs', '/api/resume-pdf',
+  '/api/engine-config', '/api/engine-connect', '/api/engine-models', '/api/engine-forget', '/api/engine-login', '/api/engine-auth', '/api/jobs', '/api/resume-pdf',
   // The AI endpoint runs prompts on your key or your signed-in Claude Code / Gemini /
   // Codex account. Left open, any website you happened to visit while the bridge was
   // running could spend it from your browser. A page hosted elsewhere that should
@@ -252,6 +319,15 @@ const PROTECTED = new Set(['/api/fetch-url', '/api/send-email', '/api/mail-confi
 async function handle(req, res) {
   // Vercel rewrites /health onto the function, so accept it under /api too.
   const url = (req.url || '').split('?')[0].replace(/^\/api\/health$/, '/health').replace(/(.)\/+$/, '$1');
+  if (lanGate(req, res, url)) return;
+  if (req.method === 'GET' && url === '/phone' && !HOSTED) {
+    // Host too: a site rebinding its own name to 127.0.0.1 must not read the key.
+    if (!isLoopback(req) || !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host || '')) {
+      res.writeHead(404); return res.end();
+    }
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    return res.end(phonePage());
+  }
 
   // CORS — allow the page to call this bridge whether it's opened locally (file://,
   // http://localhost) or from a hosted HTTPS origin (e.g. the Vercel deployment).
@@ -341,16 +417,36 @@ async function handle(req, res) {
       if (remember !== false && !engines.SERVERLESS && values && Object.keys(values).length) {
         engines.saveConfig(engine, values);
       }
-      let result;
-      try {
-        result = await engines.test(engine, model, values || null);
-      } catch (ex) {
+      // Ask which models it has while the test runs: a list it cannot give is not a
+      // failed connection, so that error is only passed along.
+      const [tested, found] = await Promise.allSettled([
+        engines.test(engine, model, values || null),
+        engines.discoverModels(engine, values || null),
+      ]);
+      if (tested.status === 'rejected') {
+        const msg = tested.reason.message;
         return sendJSON(res, 200, {
-          ok: false, error: ex.message, kind: engines.classifyFailure(ex.message),
+          ok: false, error: msg, kind: engines.classifyFailure(msg),
           engineInfo: engines.describe(engines.BY_ID.get(engine)),
         });
       }
-      return sendJSON(res, 200, { ...result, engineInfo: engines.describe(engines.BY_ID.get(engine)) });
+      const info = engines.describe(engines.BY_ID.get(engine));
+      if (found.status === 'fulfilled' && found.value.discovered) info.models = found.value.models;
+      return sendJSON(res, 200, {
+        ...tested.value, engineInfo: info,
+        modelsFound: found.status === 'fulfilled' && found.value.discovered ? found.value.models.length : 0,
+        modelsError: found.status === 'rejected' ? found.reason.message : '',
+      });
+    }
+
+    // Refresh the model list on its own, without a test prompt.
+    if (req.method === 'POST' && url === '/api/engine-models') {
+      const { engine, values } = await readJSON(req, 1e5);
+      if (!engine) throw new Error('Missing engine.');
+      const found = await engines.discoverModels(engine, values || null);
+      const info = engines.describe(engines.BY_ID.get(engine));
+      if (found.discovered) info.models = found.models;
+      return sendJSON(res, 200, { models: info.models, engineInfo: info });
     }
 
     if (req.method === 'POST' && url === '/api') {
@@ -455,4 +551,4 @@ async function handle(req, res) {
   res.writeHead(404); res.end('not found');
 }
 
-module.exports = { handle, PORT, HOSTED, engines, loadMailCfg, publicMailCfg };
+module.exports = { handle, PORT, HOSTED, LAN, lanUrls, engines, loadMailCfg, publicMailCfg };
